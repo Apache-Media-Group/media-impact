@@ -16,9 +16,10 @@ interface TenantConfig {
 
 interface AdminPanelProps {
   onBack: () => void;
+  onPreviewTenant?: (tenantId: string) => void;
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant }) => {
   const [tenants, setTenants] = useState<TenantConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -453,6 +454,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
                     {/* Acciones */}
                     <div className="flex items-center gap-2 self-end md:self-auto">
+                      {onPreviewTenant && (
+                        <button
+                          onClick={() => onPreviewTenant(t.tenant_id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
+                        >
+                          👁️ Ver Dashboard
+                        </button>
+                      )}
                       <button
                         onClick={() => openAuditModal(t.tenant_id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"

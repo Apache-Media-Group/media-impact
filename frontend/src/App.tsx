@@ -86,9 +86,42 @@ const App: React.FC = () => {
     };
   }, []);
 
+  const [adminPreviewTenant, setAdminPreviewTenant] = useState<string | null>(null);
+
+  const handlePreviewTenant = async (tenantId: string) => {
+    try {
+      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'http://localhost:8080' 
+        : '';
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/tenant/config?tenant=${tenantId}`);
+      if (res.ok) {
+        const data: TenantConfig = await res.json();
+        setTenant(data);
+        
+        // Aplicar la paleta de colores de marca dinámicamente en el documento
+        if (data.primary_color) {
+          document.documentElement.style.setProperty('--red', data.primary_color);
+          document.documentElement.style.setProperty('--red-light', data.primary_color + '1A');
+        }
+        if (data.secondary_color) {
+          document.documentElement.style.setProperty('--teal', data.secondary_color);
+          document.documentElement.style.setProperty('--teal-light', data.secondary_color + '1A');
+        }
+        
+        // Activar el modo de vista previa de administrador
+        setAdminPreviewTenant(data.tenant_name);
+        setIsAdminView(false);
+        setShowDashboard(true);
+      }
+    } catch (err) {
+      console.error("Error setting preview tenant:", err);
+    }
+  };
+
   const handleGoToDashboard = () => {
     window.location.hash = '';
     setIsAdminView(false);
+    setAdminPreviewTenant(null); // Limpiar modo vista previa al volver de forma normal
     setShowDashboard(true); // Saltar WelcomeScreen al volver de admin
   };
 
@@ -330,7 +363,7 @@ const App: React.FC = () => {
   };
 
   if (isAdminView) {
-    return <AdminPanel onBack={handleGoToDashboard} />;
+    return <AdminPanel onBack={handleGoToDashboard} onPreviewTenant={handlePreviewTenant} />;
   }
 
   if (!showDashboard) {
@@ -361,6 +394,23 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-dashboard-bg">
+      {adminPreviewTenant && (
+        <div className="bg-amber-500 text-navy py-2 px-8 flex items-center justify-between text-xs font-black uppercase tracking-wider shadow-md z-[100]">
+          <div className="flex items-center gap-2">
+            <span>👁️ Modo Vista Previa de Administrador</span>
+            <span className="bg-navy text-white px-2 py-0.5 rounded text-[10px] font-black uppercase">Visualizando: {adminPreviewTenant}</span>
+          </div>
+          <button 
+            onClick={() => {
+              window.location.hash = '#admin';
+              setIsAdminView(true);
+            }}
+            className="underline hover:text-white transition-colors"
+          >
+            Volver a la Administración →
+          </button>
+        </div>
+      )}
       <Header 
         onRefresh={handleApplyFilters} 
         onExport={handleExportPDF}
