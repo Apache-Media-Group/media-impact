@@ -873,47 +873,13 @@ async def list_tenants_admin(user_email: str = Depends(get_current_admin)):
         from app.services.auth_utils import TokenManager
         tm = TokenManager()
         if not tm.db:
-            # Si no hay conexión a Firestore activa, devolver mock inicial
-            return [
-                {
-                    "tenant_id": "sanitas",
-                    "tenant_name": "Sanitas España",
-                    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/e/e4/Sanitas_Logo.svg",
-                    "primary_color": "#0070B0",
-                    "secondary_color": "#00A2E2",
-                    "font_family": "Open Sans, sans-serif",
-                    "support_email": "soporte.sanitas@llyc.global"
-                }
-            ]
+            return []
             
         tenants_ref = tm.db.collection("tenants")
         docs = tenants_ref.stream()
         tenants = []
         for doc in docs:
             tenants.append(doc.to_dict())
-            
-        # Si la base de datos está vacía, retornar al menos LLYC y Sanitas por defecto
-        if not tenants:
-            return [
-                {
-                    "tenant_id": "llyc",
-                    "tenant_name": "LLYC Intelligence",
-                    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/e/e5/LLYC_logo.svg",
-                    "primary_color": "#E51D24",
-                    "secondary_color": "#1C2541",
-                    "font_family": "Montserrat, sans-serif",
-                    "support_email": "intelligence.mcp@llyc.global"
-                },
-                {
-                    "tenant_id": "sanitas",
-                    "tenant_name": "Sanitas España",
-                    "logo_url": "https://upload.wikimedia.org/wikipedia/commons/e/e4/Sanitas_Logo.svg",
-                    "primary_color": "#0070B0",
-                    "secondary_color": "#00A2E2",
-                    "font_family": "Open Sans, sans-serif",
-                    "support_email": "soporte.sanitas@llyc.global"
-                }
-            ]
             
         return tenants
     except Exception as e:
