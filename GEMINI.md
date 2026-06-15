@@ -112,6 +112,21 @@ Cuando se trabaje con herramientas de **Google Cloud Platform (gcloud CLI)** o s
     gcloud builds log <BUILD_ID>
     ```
 
+### Paso 3: Monitoreo en Tiempo Real del CI/CD (GitHub CLI - gh)
+* Se establece como excelente práctica el monitoreo del progreso del pipeline de integración y despliegue continuo directamente desde la terminal utilizando GitHub CLI.
+* Para vigilar y seguir en tiempo real una corrida de Actions activa hasta su finalización:
+  ```bash
+  gh run watch
+  ```
+* Para listar el historial reciente de ejecuciones de GitHub Actions:
+  ```bash
+  gh run list --limit=5
+  ```
+* Para inspeccionar los logs de un job específico fallido en GitHub:
+  ```bash
+  gh run view <run-id> --log --job=<job-id>
+  ```
+
 ---
 
 ## 🔒 6. Políticas de Seguridad y Secretos
