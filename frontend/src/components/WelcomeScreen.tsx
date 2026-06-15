@@ -1,5 +1,6 @@
+// frontend/src/components/WelcomeScreen.tsx
 import React, { useState } from 'react';
-import { LayoutGrid, Cloud, FileUp, ShieldCheck, Sparkles } from 'lucide-react';
+import { ShieldCheck, LayoutGrid, Users, Lock, ChevronRight, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 interface WelcomeScreenProps {
   onSelectGA4: () => void;
@@ -15,194 +16,176 @@ interface WelcomeScreenProps {
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ 
-  onSelectGA4, 
-  onSelectAdobe, 
-  onSelectPeec,
-  onFileUpload,
   tenant
 }) => {
-  const [showAdobeModal, setShowAdobeModal] = useState(false);
-  const [showPeecModal, setShowPeecModal] = useState(false);
-  const [adobeCreds, setAdobeCreds] = useState({
-    client_id: '',
-    client_secret: '',
-    org_id: '',
-    company_id: ''
-  });
-  const [peecApiKey, setPeecApiKey] = useState('');
+  const [isAdminLogin, setIsAdminLogin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [authSuccess, setAuthSuccess] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      onFileUpload(e.target.files[0]);
+  // Manejador para el login de Superadmin con simulación de Google Sign-In
+  const handleGoogleSignIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthSuccess(false);
+
+    const emailClean = adminEmail.toLowerCase().trim();
+
+    if (!emailClean) {
+      setAuthError('Por favor, introduce tu correo corporativo.');
+      return;
     }
+
+    // Validación estricta del dominio corporativo de LLYC
+    if (!emailClean.endsWith('@llyc.global') && !emailClean.endsWith('@llyc.ai')) {
+      setAuthError('Acceso denegado: El correo electrónico debe pertenecer obligatoriamente al dominio corporativo @llyc.global o @llyc.ai.');
+      return;
+    }
+
+    // Éxito en la validación del dominio
+    setAuthSuccess(true);
+    setTimeout(() => {
+      // Registrar la sesión del usuario simulada y redireccionar al panel de administración (#admin)
+      localStorage.setItem('admin_user_email', emailClean);
+      window.location.hash = '#admin';
+    }, 1200);
+  };
+
+  const handleClientSelect = (clientId: string) => {
+    // Carga de inquilino dinámico mediante redirección con query param en demo
+    window.location.href = `/?tenant=${clientId}`;
   };
 
   return (
-    <div className="fixed inset-0 bg-dashboard-bg flex items-center justify-center p-5 z-[1000]">
-      <div className="bg-white rounded-2xl p-10 max-w-3xl w-full shadow-2xl flex flex-col items-center text-center">
+    <div className="fixed inset-0 bg-navy flex items-center justify-center p-5 z-[1000]">
+      {/* FONDO DE LLYC DEGRADADO */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-red/10 via-navy to-navy pointer-events-none"></div>
+
+      <div className="bg-white/5 border border-white/10 rounded-3xl p-10 max-w-lg w-full shadow-2xl relative backdrop-blur-md text-center">
+        {/* LOGO DINÁMICO */}
         {tenant?.logo_url ? (
-          <img src={tenant.logo_url} alt={tenant.tenant_name} className="h-12 object-contain mb-6 max-w-[200px]" />
+          <img src={tenant.logo_url} alt={tenant.tenant_name} className="h-12 object-contain mb-8 mx-auto max-w-[200px]" />
         ) : (
-          <div className="text-red font-bold text-3xl mb-6 tracking-tighter">{tenant?.tenant_name || 'LLYC'}</div>
+          <div className="text-red font-black text-4xl mb-8 tracking-tighter">LLYC</div>
         )}
-        <h2 className="text-2xl font-bold text-navy mb-2">Intelligence Dashboard 2026</h2>
-        <p className="text-mid mb-8">Selecciona tu origen de datos para comenzar el análisis</p>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <button 
-            onClick={onSelectGA4}
-            className="bg-dashboard-bg rounded-xl p-6 flex flex-col items-center gap-3 transition-all hover:border-red hover:bg-white hover:-translate-y-1 hover:shadow-lg border-2 border-transparent"
-          >
-            <Cloud className="w-10 h-10 text-navy" />
-            <span className="font-bold text-xs uppercase tracking-widest text-navy">Google Analytics 4</span>
-          </button>
+        <h2 className="text-2xl font-black text-white tracking-tight mb-2">Portal Analítico Inteligente</h2>
+        <p className="text-xs text-mid mb-10 uppercase tracking-widest font-semibold">Marketing Control Panel 2026</p>
 
-          <button 
-            onClick={() => setShowAdobeModal(true)}
-            className="bg-dashboard-bg rounded-xl p-6 flex flex-col items-center gap-3 transition-all hover:border-red hover:bg-white hover:-translate-y-1 hover:shadow-lg border-2 border-transparent"
-          >
-            <LayoutGrid className="w-10 h-10 text-navy" />
-            <span className="font-bold text-xs uppercase tracking-widest text-navy">Adobe Analytics</span>
-          </button>
-
-          <button 
-            onClick={() => setShowPeecModal(true)}
-            className="bg-dashboard-bg rounded-xl p-6 flex flex-col items-center gap-3 transition-all hover:border-red hover:bg-white hover:-translate-y-1 hover:shadow-lg border-2 border-transparent"
-          >
-            <Sparkles className="w-10 h-10 text-red" />
-            <span className="font-bold text-xs uppercase tracking-widest text-navy">Peec.ai (AI Analytics)</span>
-          </button>
-
-          <label className="bg-dashboard-bg rounded-xl p-6 flex flex-col items-center gap-3 transition-all hover:border-red hover:bg-white hover:-translate-y-1 hover:shadow-lg border-2 border-transparent cursor-pointer">
-            <FileUp className="w-10 h-10 text-navy" />
-            <span className="font-bold text-xs uppercase tracking-widest text-navy">Archivo Local</span>
-            <input type="file" className="hidden" onChange={handleFileChange} accept=".csv,.xlsx,.xls" />
-          </label>
-        </div>
-
-        <div className="mt-8 flex flex-col items-center gap-4">
-          <button 
-            onClick={onSelectGA4}
-            className="text-[10px] font-black uppercase tracking-[0.2em] text-mid hover:text-red transition-colors border border-dashboard-border px-4 py-2 rounded-full hover:border-red"
-          >
-            (Mock Up)
-          </button>
-          
-          <div className="flex flex-col items-center gap-3">
-            <div className="flex items-center justify-center gap-2 text-[10px] text-mid font-bold uppercase tracking-widest">
-              <ShieldCheck className="w-3 h-3" />
-              LLYC Intelligence · Privacy & Data Secure
-            </div>
+        {!isAdminLogin ? (
+          /* SELECCIÓN PRINCIPAL DE PORTAL */
+          <div className="space-y-4 text-left">
             <button 
-              onClick={() => window.location.hash = '#admin'}
-              className="text-[9px] font-black uppercase tracking-[0.15em] text-red/60 hover:text-red transition-colors"
+              onClick={() => handleClientSelect('sanitas')}
+              className="w-full bg-white/5 border border-white/10 hover:border-teal/50 hover:bg-white/[0.08] p-5 rounded-2xl flex items-center justify-between transition-all group group-hover:scale-[1.01]"
             >
-              🔒 Acceso Consultor LLYC (Superadmin)
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-teal/10 flex items-center justify-center text-teal">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-white">Acceso Cliente (Sanitas)</h3>
+                  <p className="text-[11px] text-mid mt-0.5">Ver Dashboard analítico de marca Sanitas</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-mid group-hover:text-white transition-colors" />
+            </button>
+
+            <button 
+              onClick={() => handleClientSelect('llyc')}
+              className="w-full bg-white/5 border border-white/10 hover:border-red/50 hover:bg-white/[0.08] p-5 rounded-2xl flex items-center justify-between transition-all group group-hover:scale-[1.01]"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-red/10 flex items-center justify-center text-red">
+                  <LayoutGrid className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-white">Acceso Analítica LLYC</h3>
+                  <p className="text-[11px] text-mid mt-0.5">Ver Dashboard con el branding corporativo</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-mid group-hover:text-white transition-colors" />
+            </button>
+
+            <button 
+              onClick={() => setIsAdminLogin(true)}
+              className="w-full bg-red/10 border border-red/20 hover:bg-red/20 p-5 rounded-2xl flex items-center justify-between transition-all group"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-red flex items-center justify-center text-white">
+                  <Lock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm text-white">Superadmin LLYC</h3>
+                  <p className="text-[11px] text-red/80 mt-0.5">Administrar clientes y Secret Manager</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-red group-hover:text-white transition-colors" />
             </button>
           </div>
+        ) : (
+          /* PANTALLA DE AUTENTICACIÓN CON GOOGLE DE SUPERADMIN */
+          <div className="text-left space-y-5">
+            <div className="flex items-center gap-2 mb-4">
+              <button 
+                onClick={() => { setIsAdminLogin(false); setAuthError(null); }}
+                className="text-xs font-bold text-mid hover:text-white transition-colors"
+              >
+                ← Volver
+              </button>
+            </div>
+
+            <div className="text-center mb-6">
+              <h3 className="font-black text-white text-base">Autenticación Superadmin</h3>
+              <p className="text-xs text-mid mt-1">Es necesario verificar tu cuenta corporativa de Google LLYC</p>
+            </div>
+
+            {authError && (
+              <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl flex items-start gap-2.5 text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            {authSuccess && (
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl flex items-start gap-2.5 text-xs">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 animate-bounce" />
+                <span>¡Autenticado con éxito! Redireccionando...</span>
+              </div>
+            )}
+
+            <form onSubmit={handleGoogleSignIn} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Correo Corporativo de Google</label>
+                <input 
+                  type="email" 
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="ejemplo@llyc.global"
+                  required
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-red transition-colors font-semibold"
+                />
+              </div>
+
+              <button 
+                type="submit"
+                className="w-full py-3 bg-red text-white text-xs font-black uppercase tracking-widest rounded-xl hover:bg-red/90 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red/25"
+              >
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M12.24 10.285V13.4h6.887C18.2 15.614 15.645 18 12.24 18c-3.86 0-7-3.14-7-7s3.14-7 7-7c1.73 0 3.32.63 4.54 1.76l2.365-2.365C17.155 1.455 14.81 0 12.24 0c-6.075 0-11 4.925-11 11s4.925 11 11 11c6.34 0 11.24-4.46 11.24-11 0-.74-.08-1.46-.22-2.115H12.24z"/>
+                </svg>
+                Iniciar Sesión con Google
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* PIE DE PORTAL */}
+        <div className="mt-12 flex items-center justify-center gap-2 text-[10px] text-mid font-bold uppercase tracking-widest">
+          <ShieldCheck className="w-3.5 h-3.5 text-mid" />
+          LLYC Analytics · Secure Access Compliant
         </div>
       </div>
-
-      {showAdobeModal && (
-        <div className="fixed inset-0 bg-navy/80 flex items-center justify-center p-5 z-[1100]">
-          <div className="bg-white rounded-xl p-8 max-w-md w-full shadow-2xl">
-            <h3 className="text-lg font-bold mb-6 text-navy">Credenciales Adobe</h3>
-            
-            <div className="space-y-4 text-left">
-              <div>
-                <label className="block text-[10px] font-bold text-mid uppercase mb-1">Client ID (API Key)</label>
-                <input 
-                  type="text" 
-                  className="w-full p-3 border border-dashboard-border rounded-lg text-sm focus:ring-2 ring-red/20 outline-none"
-                  value={adobeCreds.client_id}
-                  onChange={e => setAdobeCreds({...adobeCreds, client_id: e.target.value})}
-                  placeholder="8c6..."
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-mid uppercase mb-1">Client Secret</label>
-                <input 
-                  type="password" 
-                  className="w-full p-3 border border-dashboard-border rounded-lg text-sm focus:ring-2 ring-red/20 outline-none"
-                  value={adobeCreds.client_secret}
-                  onChange={e => setAdobeCreds({...adobeCreds, client_secret: e.target.value})}
-                  placeholder="••••••••"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-mid uppercase mb-1">Org ID</label>
-                <input 
-                  type="text" 
-                  className="w-full p-3 border border-dashboard-border rounded-lg text-sm focus:ring-2 ring-red/20 outline-none"
-                  value={adobeCreds.org_id}
-                  onChange={e => setAdobeCreds({...adobeCreds, org_id: e.target.value})}
-                  placeholder="XXXX@AdobeOrg"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold text-mid uppercase mb-1">Company ID</label>
-                <input 
-                  type="text" 
-                  className="w-full p-3 border border-dashboard-border rounded-lg text-sm focus:ring-2 ring-red/20 outline-none"
-                  value={adobeCreds.company_id}
-                  onChange={e => setAdobeCreds({...adobeCreds, company_id: e.target.value})}
-                  placeholder="llyc_prod"
-                />
-              </div>
-            </div>
-
-            <button 
-              onClick={() => onSelectAdobe(adobeCreds)}
-              className="w-full mt-6 bg-red text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-            >
-              Conectar Adobe
-            </button>
-            <button 
-              onClick={() => setShowAdobeModal(false)}
-              className="w-full mt-2 bg-navy-light text-navy py-3 rounded-lg font-bold hover:bg-dashboard-border transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showPeecModal && (
-        <div className="fixed inset-0 bg-navy/80 flex items-center justify-center p-5 z-[1100]">
-          <div className="bg-white rounded-xl p-8 max-w-md w-full shadow-2xl">
-            <h3 className="text-lg font-bold mb-6 text-navy">Conectar Peec.ai</h3>
-            
-            <div className="space-y-4 text-left">
-              <div>
-                <label className="block text-[10px] font-bold text-mid uppercase mb-1">Peec.ai API Key</label>
-                <input 
-                  type="password" 
-                  className="w-full p-3 border border-dashboard-border rounded-lg text-sm focus:ring-2 ring-red/20 outline-none"
-                  value={peecApiKey}
-                  onChange={e => setPeecApiKey(e.target.value)}
-                  placeholder="peec_api_key_xxxxxxxx"
-                />
-                <p className="text-[10px] text-mid mt-1">
-                  Obtén tu API key desde la sección de configuración de tu cuenta en docs.peec.ai.
-                </p>
-              </div>
-            </div>
-
-            <button 
-              onClick={() => onSelectPeec(peecApiKey)}
-              className="w-full mt-6 bg-red text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
-            >
-              Conectar Peec.ai
-            </button>
-            <button 
-              onClick={() => setShowPeecModal(false)}
-              className="w-full mt-2 bg-navy-light text-navy py-3 rounded-lg font-bold hover:bg-dashboard-border transition-colors"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
