@@ -11,6 +11,8 @@ WORKDIR /app
 # Instalar dependencias del sistema necesarias para compilar ciertos paquetes si hiciera falta
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    libcairo2-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar el archivo de requerimientos e instalar dependencias de Python
