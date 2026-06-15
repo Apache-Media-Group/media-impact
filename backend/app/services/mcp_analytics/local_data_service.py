@@ -21,6 +21,31 @@ class LocalDataService:
         self.metrics: List[str] = []
         self._cache = {}
 
+    async def save_file(self, file: Any, user_email: str) -> Dict[str, Any]:
+        """Sube y procesa un archivo desde FastAPI UploadFile."""
+        try:
+            content = await file.read()
+            filename = file.filename
+            
+            # Guardar en disco
+            file_path = os.path.join(UPLOAD_DIR, filename)
+            with open(file_path, "wb") as f:
+                f.write(content)
+            
+            logger.info(f"File {filename} saved for user {user_email}")
+            
+            # Cargar y analizar
+            result = self._load_df_from_disk(filename)
+            
+            if result["status"] == "success":
+                # Devolver un property_id especial que empiece con local:
+                result["property_id"] = f"local:{filename}"
+            
+            return result
+        except Exception as e:
+            logger.error(f"Error saving file: {e}")
+            return {"status": "error", "message": str(e)}
+
     def load_file(self, file_content: bytes, filename: str) -> Dict[str, Any]:
         try:
             file_path = os.path.join(UPLOAD_DIR, filename)

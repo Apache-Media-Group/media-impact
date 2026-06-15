@@ -13,3 +13,4 @@ numpy
 scipy
 python-multipart
 python-dateutil
+google-cloud-secret-manager
