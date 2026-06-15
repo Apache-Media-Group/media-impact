@@ -2,14 +2,14 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 
-// Configuración del Web SDK de Firebase para el proyecto LLYC Adtech Pruebas
+// Configuración del Web SDK de Firebase 100% dinámica y agnóstica de proyecto
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSy-PlaceholderKeyForCompilationOnly",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "llyc-adtech-pruebas.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "llyc-adtech-pruebas",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "llyc-adtech-pruebas.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "1076786873783",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:1076786873783:web:default"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
 // Inicializar Firebase

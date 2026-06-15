@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 
 class Settings(BaseSettings):
-    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or "media-impact-llyc"
+    GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT") or ""
     PROJECT_ID: str = GCP_PROJECT_ID
     GOOGLE_CLOUD_PROJECT: str = GCP_PROJECT_ID
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
