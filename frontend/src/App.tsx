@@ -10,6 +10,8 @@ import { TopicsCard } from './components/TopicsCard';
 import { DomainsTable } from './components/DomainsTable';
 import { useAnalytics } from './hooks/useAnalytics';
 import { AdminPanel } from './components/AdminPanel';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 
 interface TenantConfig {
   tenant_id: string;
@@ -28,13 +30,52 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState('--:--');
   const [exporting, setExporting] = useState(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
-  const [isAdminView, setIsAdminView] = useState(window.location.hash === '#admin' || window.location.pathname === '/admin');
+  const [isAdminView, setIsAdminView] = useState(false);
 
-  // Escuchar cambios de URL/Hash para ruteo nativo de la SPA
+  // 1. Observador de estado de Auth oficial de Firebase para mantener consistencia de login
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const email = user.email || '';
+        if (email.toLowerCase().endsWith('@llyc.global') || email.toLowerCase().endsWith('@llyc.ai')) {
+          localStorage.setItem('admin_user_email', email.toLowerCase());
+        } else {
+          // Expulsión automática si se cuela otra cuenta no corporativa
+          auth.signOut();
+          localStorage.removeItem('admin_user_email');
+        }
+      } else {
+        localStorage.removeItem('admin_user_email');
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Guardia de Ruta Estricto en el Ruteo Nativo de la SPA
   useEffect(() => {
     const handleLocationChange = () => {
-      setIsAdminView(window.location.hash === '#admin' || window.location.pathname === '/admin');
+      const isHashAdmin = window.location.hash === '#admin' || window.location.pathname === '/admin';
+      
+      if (isHashAdmin) {
+        // Verificar si existe una sesión de administrador corporativo LLYC activa
+        const savedEmail = localStorage.getItem('admin_user_email');
+        const isLlycEmail = savedEmail && (savedEmail.endsWith('@llyc.global') || savedEmail.endsWith('@llyc.ai'));
+        
+        if (!isLlycEmail) {
+          // Bloquear el renderizado y expulsar inmediatamente a la landing
+          window.location.hash = '';
+          setIsAdminView(false);
+          alert("Acceso denegado: Se requiere iniciar sesión con una cuenta corporativa de LLYC (@llyc.global o @llyc.ai) para acceder al panel de administración.");
+        } else {
+          setIsAdminView(true);
+        }
+      } else {
+        setIsAdminView(false);
+      }
     };
+    
+    // Ejecutar chequeo en la carga inicial
+    handleLocationChange();
     
     window.addEventListener('popstate', handleLocationChange);
     window.addEventListener('hashchange', handleLocationChange);
