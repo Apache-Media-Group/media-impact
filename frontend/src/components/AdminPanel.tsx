@@ -297,7 +297,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
   return (
     <div className="min-h-screen bg-navy text-white font-sans flex flex-col">
       {/* HEADER DE ADMÍN */}
-      <header className="h-16 bg-navy-light/10 border-b border-white/10 flex items-center justify-between px-8 sticky top-0 z-[50] backdrop-blur-md">
+      <header className="h-16 bg-[#0a1829] border-b border-white/10 flex items-center justify-between px-8 sticky top-0 z-[50] backdrop-blur-md">
         <div className="flex items-center gap-4">
           <button 
             onClick={onBack}
@@ -613,9 +613,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                   value={editingTenant.tenant_id}
                   onChange={(e) => setEditingTenant({ ...editingTenant, tenant_id: e.target.value.toLowerCase().replace(/\s+/g, '-') })}
                   disabled={!!editingTenant.updated_at} // Bloquear ID si ya existe
-                  placeholder="ej: sanitas"
+                  placeholder="ej: mi-organizacion"
                   required
-                  className="w-full bg-navy-light/10 border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors disabled:opacity-50"
+                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors disabled:opacity-50"
                 />
               </div>
 
@@ -625,9 +625,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                   type="text" 
                   value={editingTenant.tenant_name}
                   onChange={(e) => setEditingTenant({ ...editingTenant, tenant_name: e.target.value })}
-                  placeholder="ej: Sanitas España"
+                  placeholder="ej: Mi Empresa S.A."
                   required
-                  className="w-full bg-navy-light/10 border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
+                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
                 />
               </div>
 
@@ -641,7 +641,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                       onChange={(e) => setEditingTenant({ ...editingTenant, logo_url: e.target.value })}
                       placeholder="Escribe la URL del logo o sube un archivo..."
                       required
-                      className="flex-1 bg-navy-light/10 border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
+                      className="flex-1 bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
                     />
                     <label className="px-4 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-xs font-bold rounded-lg cursor-pointer flex items-center justify-center min-w-[120px] transition-colors">
                       {uploadingLogo ? 'Subiendo...' : 'Subir Archivo'}
@@ -679,7 +679,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                       onChange={(e) => setEditingTenant({ ...editingTenant, primary_color: e.target.value })}
                       maxLength={7}
                       required
-                      className="flex-1 bg-navy-light/10 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-red"
+                      className="flex-1 bg-[#0a1829] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-red"
                     />
                   </div>
                 </div>
@@ -699,7 +699,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                       onChange={(e) => setEditingTenant({ ...editingTenant, secondary_color: e.target.value })}
                       maxLength={7}
                       required
-                      className="flex-1 bg-navy-light/10 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-red"
+                      className="flex-1 bg-[#0a1829] border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white uppercase font-mono focus:outline-none focus:border-red"
                     />
                   </div>
                 </div>
@@ -711,9 +711,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                   type="email" 
                   value={editingTenant.support_email}
                   onChange={(e) => setEditingTenant({ ...editingTenant, support_email: e.target.value })}
-                  placeholder="soporte.sanitas@llyc.global"
+                  placeholder="soporte@mi-organizacion.com"
                   required
-                  className="w-full bg-navy-light/10 border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
+                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
                 />
               </div>
 
@@ -769,7 +769,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                 <select 
                   value={secretType}
                   onChange={(e) => setSecretType(e.target.value)}
-                  className="w-full bg-navy-light/10 border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red"
+                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red"
                 >
                   <option value="brandlight-key">Brandlight BI API Key (Visibilidad / SoV)</option>
                   <option value="peec-key">Peec.ai API Token (Comportamiento de IA)</option>
@@ -786,7 +786,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                   placeholder="Pega aquí la clave secreta obtenida del proveedor analítico..."
                   required
                   rows={4}
-                  className="w-full bg-navy-light/10 border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
+                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
                 />
               </div>
 
