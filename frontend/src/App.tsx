@@ -9,6 +9,7 @@ import { ChartWidget } from './components/ChartWidget';
 import { TopicsCard } from './components/TopicsCard';
 import { DomainsTable } from './components/DomainsTable';
 import { useAnalytics } from './hooks/useAnalytics';
+import { AdminPanel } from './components/AdminPanel';
 
 interface TenantConfig {
   tenant_id: string;
@@ -18,6 +19,7 @@ interface TenantConfig {
   secondary_color: string;
   font_family: string;
   support_email: string;
+  updated_at?: string;
 }
 
 const App: React.FC = () => {
@@ -26,6 +28,28 @@ const App: React.FC = () => {
   const [lastUpdated, setLastUpdated] = useState('--:--');
   const [exporting, setExporting] = useState(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const [isAdminView, setIsAdminView] = useState(window.location.hash === '#admin' || window.location.pathname === '/admin');
+
+  // Escuchar cambios de URL/Hash para ruteo nativo de la SPA
+  useEffect(() => {
+    const handleLocationChange = () => {
+      setIsAdminView(window.location.hash === '#admin' || window.location.pathname === '/admin');
+    };
+    
+    window.addEventListener('popstate', handleLocationChange);
+    window.addEventListener('hashchange', handleLocationChange);
+    
+    return () => {
+      window.removeEventListener('popstate', handleLocationChange);
+      window.removeEventListener('hashchange', handleLocationChange);
+    };
+  }, []);
+
+  const handleGoToDashboard = () => {
+    window.location.hash = '';
+    setIsAdminView(false);
+    setShowDashboard(true); // Saltar WelcomeScreen al volver de admin
+  };
 
   const [tenant, setTenant] = useState<TenantConfig>({
     tenant_id: 'llyc',
@@ -264,6 +288,10 @@ const App: React.FC = () => {
     }
   };
 
+  if (isAdminView) {
+    return <AdminPanel onBack={handleGoToDashboard} />;
+  }
+
   if (!showDashboard) {
     return (
       <WelcomeScreen 
@@ -295,6 +323,7 @@ const App: React.FC = () => {
       <Header 
         onRefresh={handleApplyFilters} 
         onExport={handleExportPDF}
+        onFileUpload={handleFileUpload}
         loading={loading} 
         exporting={exporting}
         lastUpdated={lastUpdated} 

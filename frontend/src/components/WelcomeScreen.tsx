@@ -88,9 +88,17 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             (Mock Up)
           </button>
           
-          <div className="flex items-center justify-center gap-2 text-[10px] text-mid font-bold uppercase tracking-widest">
-            <ShieldCheck className="w-3 h-3" />
-            LLYC Intelligence · Privacy & Data Secure
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex items-center justify-center gap-2 text-[10px] text-mid font-bold uppercase tracking-widest">
+              <ShieldCheck className="w-3 h-3" />
+              LLYC Intelligence · Privacy & Data Secure
+            </div>
+            <button 
+              onClick={() => window.location.hash = '#admin'}
+              className="text-[9px] font-black uppercase tracking-[0.15em] text-red/60 hover:text-red transition-colors"
+            >
+              🔒 Acceso Consultor LLYC (Superadmin)
+            </button>
           </div>
         </div>
       </div>
