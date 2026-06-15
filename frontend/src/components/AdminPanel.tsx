@@ -1,6 +1,7 @@
 // frontend/src/components/AdminPanel.tsx
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Plus, Edit2, Key, Save, ArrowLeft, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { ShieldCheck, Plus, Edit2, Key, Save, ArrowLeft, RefreshCw, AlertCircle, CheckCircle2, LogOut, User } from 'lucide-react';
+import { auth } from '../firebase';
 
 interface TenantConfig {
   tenant_id: string;
@@ -33,6 +34,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [secretValue, setSecretValue] = useState('');
   const [showSecretModal, setShowSecretModal] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [adminEmail] = useState(localStorage.getItem('admin_user_email') || 'consultor@llyc.global');
+
+  const handleLogout = async () => {
+    try {
+      await auth.signOut();
+      localStorage.removeItem('admin_user_email');
+      window.location.hash = ''; // Quitar hash de admin
+      onBack();
+    } catch (err) {
+      console.error("Error signing out:", err);
+    }
+  };
 
   const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
     ? 'http://localhost:8080' 
@@ -195,7 +208,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           </div>
         </div>
         
-        <div>
+        <div className="flex items-center gap-4">
           <button 
             onClick={fetchTenants}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors"
@@ -203,6 +216,26 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           >
             <RefreshCw className={`w-4 h-4 text-mid ${loading ? 'animate-spin' : ''}`} />
           </button>
+          
+          <div className="h-4 w-[1px] bg-white/10"></div>
+          
+          {/* PERFIL DE USUARIO Y LOGOUT */}
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-white/5 border border-white/5 px-3 py-1.5 rounded-lg">
+              <div className="w-5 h-5 rounded-full bg-red flex items-center justify-center text-[10px] font-black uppercase text-white shadow-md shadow-red/10">
+                <User className="w-3 h-3 text-white" />
+              </div>
+              <span className="text-[11px] font-semibold text-white/80 max-w-[150px] truncate">{adminEmail}</span>
+            </div>
+            
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
+              title="Cerrar Sesión"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Cerrar Sesión
+            </button>
+          </div>
         </div>
       </header>
 
