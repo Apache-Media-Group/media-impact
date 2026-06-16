@@ -30,7 +30,7 @@ ChartJS.register(
 interface ChartWidgetProps {
   type: 'line' | 'bar' | 'doughnut';
   title: string;
-  source?: 'GA4' | 'BL';
+  source?: 'GA4' | 'BL' | 'Adobe';
   data: any;
   options?: any;
   height?: number;

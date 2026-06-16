@@ -8,6 +8,7 @@ export interface AnalyticsState {
   session_id?: string;
   account_id?: string;
   segment_id?: string;
+  tenant_id?: string;
 }
 
 export interface ApiResponse {

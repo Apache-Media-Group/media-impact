@@ -296,6 +296,7 @@ const App: React.FC = () => {
         if (res.ok) {
           const data: TenantConfig = await res.json();
           setTenant(data);
+          updateState({ tenant_id: data.tenant_id });
           
           // Aplicar la paleta de colores de marca dinámicamente en el documento
           if (data.primary_color) {
@@ -535,6 +536,8 @@ const App: React.FC = () => {
     {d:'abc.es',m:47,g:7},{d:'iprn.es',m:39,g:-5},{d:'prnoticias.com',m:33,g:12},{d:'dircomfidencial.com',m:27,g:-3}
   ].map(r => ({ ...r, m: Math.round(r.m * mult) }));
 
+  const trafficSource = state.connection_id?.toLowerCase().includes('adobe') ? 'Adobe' : 'GA4';
+
   return (
     <div className="min-h-screen flex flex-col bg-dashboard-bg">
       {adminPreviewTenant && (
@@ -556,8 +559,8 @@ const App: React.FC = () => {
       )}
       <Header 
         onRefresh={handleApplyFilters} 
-        onExport={handleExportPDF}
-        onFileUpload={handleFileUpload}
+        onExport={handleExportPDF} 
+        onFileUpload={handleFileUpload} 
         loading={loading} 
         exporting={exporting}
         lastUpdated={lastUpdated} 
@@ -577,10 +580,10 @@ const App: React.FC = () => {
 
       <main ref={dashboardRef} className="flex-1 p-8 space-y-6 max-w-[1400px] mx-auto w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-          <KpiCard label="Sesiones totales" value={data?.total_sessions || mockData.total_sessions} suffix="K" trend="+12.3%" source="GA4" />
-          <KpiCard label="IA referida" value={data?.ai_referred || mockData.ai_referred} suffix="K" trend="+34.1%" source="GA4" />
-          <KpiCard label="IA inferida" value={data?.ai_inferred || mockData.ai_inferred} suffix="K" trend="+21.7%" source="GA4" />
-          <KpiCard label="Engagement IA" value={data?.engagement_score || mockData.engagement_score} suffix="/100" trend="+8 pts" source="GA4" />
+          <KpiCard label="Sesiones totales" value={data?.total_sessions || mockData.total_sessions} suffix="K" trend="+12.3%" source={trafficSource} />
+          <KpiCard label="IA referida" value={data?.ai_referred || mockData.ai_referred} suffix="K" trend="+34.1%" source={trafficSource} />
+          <KpiCard label="IA inferida" value={data?.ai_inferred || mockData.ai_inferred} suffix="K" trend="+21.7%" source={trafficSource} />
+          <KpiCard label="Engagement IA" value={data?.engagement_score || mockData.engagement_score} suffix="/100" trend="+8 pts" source={trafficSource} />
           <KpiCard label="Visibilidad unbranded" value={data?.visibility_score || mockData.visibility_score} suffix="%" trend="+5 pts" source="BL" colorClass="!bg-teal-light/20 border-teal/20" />
           <KpiCard label="Score sentimiento" value={data?.sentiment_score || mockData.sentiment_score} suffix="/10" trend="+0.4" source="BL" />
           <KpiCard label="Modelos analizados" value="5" trend="GPT · Gemini · Perplexity..." source="BL" />
@@ -592,7 +595,7 @@ const App: React.FC = () => {
             <ChartWidget 
               type="line" 
               title="Evolución tráfico IA" 
-              source="GA4" 
+              source={trafficSource} 
               data={lineData}
               height={200}
               footer={
@@ -607,7 +610,7 @@ const App: React.FC = () => {
             <ChartWidget 
               type="doughnut" 
               title="Composición de audiencia" 
-              source="GA4" 
+              source={trafficSource} 
               data={{
                 labels: ['IA directa', 'IA inferida', 'Resto'],
                 datasets: [{

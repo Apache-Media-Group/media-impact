@@ -15,6 +15,7 @@ export const useAnalytics = () => {
     property_id: '',
     account_id: '',
     segment_id: '',
+    tenant_id: '',
   });
 
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -38,7 +39,8 @@ export const useAnalytics = () => {
           start_date: currentState.from,
           end_date: currentState.to,
           market: currentState.market,
-          segment_id: currentState.segment_id || undefined
+          segment_id: currentState.segment_id || undefined,
+          tenant_id: currentState.tenant_id || undefined
         })
       });
 

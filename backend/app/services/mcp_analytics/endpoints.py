@@ -447,9 +447,52 @@ async def run_report(
     connection_id: Optional[str] = None, 
     user_email: str = Depends(get_current_user)
 ):
-    """Ejecuta un reporte en el proveedor configurado."""
+    """Ejecuta un reporte en el proveedor configurado, prefiriendo BigQuery si hay datos del tenant."""
     s_id = request.session_id or session_id
     c_id = request.connection_id or connection_id
+    t_id = request.tenant_id
+    
+    # Si se pasa un tenant_id, intentar recuperar datos consolidados reales desde BigQuery
+    if t_id:
+        try:
+            from app.services.mcp_analytics.bigquery_service import BigQueryService
+            bq = BigQueryService()
+            
+            # Formatear fechas de consulta
+            start_date = request.date_ranges[0]["start_date"] if request.date_ranges else "30daysAgo"
+            end_date = request.date_ranges[0]["end_date"] if request.date_ranges else "today"
+            
+            if "daysago" in start_date.lower():
+                import re
+                match = re.match(r"(\d+)daysago", start_date.lower())
+                if match:
+                    days = int(match.group(1))
+                    start_date = (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d")
+                else:
+                    start_date = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d")
+            if end_date.lower() == "today":
+                end_date = datetime.utcnow().strftime("%Y-%m-%d")
+                
+            metrics = bq.query_dashboard_metrics(t_id, start_date, end_date)
+            if metrics and metrics.get("total_sessions", 0) > 0:
+                logger.info(f"Consumiendo datos reales desde Google BigQuery para el tenant '{t_id}'.")
+                # Formatear la respuesta simulando la estructura del reporte unificado
+                return RunReportResponse(
+                    property_id=request.property_id or "bigquery-fact",
+                    dimension_headers=["date"],
+                    metric_headers=["sessions", "ai_referred", "ai_inferred", "engagement_score"],
+                    rows=[{
+                        "date": datetime.utcnow().strftime("%Y%m%d"),
+                        "sessions": str(metrics["total_sessions"]),
+                        "ai_referred": str(metrics["ai_referred"]),
+                        "ai_inferred": str(metrics["ai_inferred"]),
+                        "conversions": str(metrics["engagement_score"])
+                    }],
+                    row_count=1
+                )
+        except Exception as bqe:
+            logger.warning(f"No se pudo consultar BigQuery para {t_id}, procediendo con fallback tradicional: {bqe}")
+
     service = get_analytics_service(s_id, c_id, user_email)
     result = await service.run_report(request)
     return result
@@ -990,15 +1033,94 @@ async def create_or_update_tenant_admin(
         logger.error(f"Error al guardar tenant: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+from fastapi import BackgroundTasks
+
+def create_or_update_tenant_scheduler(tenant_id: str):
+    """
+    Crea o actualiza de forma programática un Job en Cloud Scheduler para el tenant
+    a fin de ejecutar la ETL diaria a las 03:00 UTC.
+    """
+    try:
+        from google.cloud import scheduler_v1
+        client = scheduler_v1.CloudSchedulerClient()
+        
+        project_id = os.getenv("GCP_PROJECT_ID") or "llyc-adtech-pruebas"
+        location_id = "us-central1"
+        parent = f"projects/{project_id}/locations/{location_id}"
+        
+        job_id = f"mcp-analytics-{tenant_id}-etl-daily"
+        job_name = f"{parent}/jobs/{job_id}"
+        
+        # URI de nuestro Cloud Run
+        uri = f"https://llyc-intelligence-api-mz6ut5biaa-uc.a.run.app/api/v1/mcp-analytics/admin/etl/trigger"
+        
+        # Construir el job
+        job = scheduler_v1.Job(
+            name=job_name,
+            description=f"Iniciador automático de la ETL diaria para el cliente MCP: {tenant_id}",
+            http_target=scheduler_v1.HttpTarget(
+                uri=uri,
+                http_method=scheduler_v1.HttpMethod.POST,
+                headers={"Content-Type": "application/json"},
+                body=f'{{"tenant_id": "{tenant_id}"}}'.encode("utf-8")
+            ),
+            schedule="0 3 * * *",
+            time_zone="UTC"
+        )
+        
+        try:
+            client.update_job(job=job)
+            logger.info(f"✅ Job de Cloud Scheduler '{job_id}' actualizado con éxito.")
+        except Exception:
+            client.create_job(parent=parent, job=job)
+            logger.info(f"✅ Job de Cloud Scheduler '{job_id}' creado con éxito.")
+            
+    except Exception as e:
+        logger.warning(f"No se pudo automatizar Cloud Scheduler para '{tenant_id}': {e}")
+
+
+async def run_historical_backfill_task(tenant_id: str):
+    """
+    Ejecuta un backfill histórico (últimos 90 días) para el tenant de forma asíncrona
+    en segundo plano a fin de poblar las tablas analíticas en BigQuery.
+    """
+    try:
+        logger.info(f"🚀 Iniciando Backfill Histórico asíncrono (90 días) para '{tenant_id}'...")
+        from app.services.mcp_analytics.secret_manager_service import SecretManagerService
+        from app.services.mcp_analytics.etl_service import MCPETLService
+        
+        sms = SecretManagerService()
+        credentials = {}
+        secret_types = ["brandlight-key", "peec-key", "ga4-creds", "adobe-creds"]
+        for st in secret_types:
+            val = sms.get_tenant_secret(tenant_id, st)
+            if val:
+                credentials[st] = val
+                
+        date_from = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
+        date_to = datetime.utcnow().strftime("%Y-%m-%d")
+        
+        etl = MCPETLService(tenant_id=tenant_id)
+        await etl.run_full_sync(
+            credentials=credentials,
+            date_from=date_from,
+            date_to=date_to
+        )
+        logger.info(f"🏁 Backfill Histórico completado con éxito para '{tenant_id}'.")
+    except Exception as e:
+        logger.error(f"Error en el Backfill Histórico asíncrono de '{tenant_id}': {e}")
+
 @router.post("/admin/tenants/{tenant_id}/secrets", response_model=Dict[str, Any])
 async def save_tenant_secret_admin(
     tenant_id: str,
     secret_req: TenantSecretRequest,
+    background_tasks: BackgroundTasks,
     user_email: str = Depends(get_current_admin)
 ):
     """
     Guarda y encripta una clave sensible de un cliente (ej: Brandlight API Key)
     directamente en GCP Secret Manager (Solo Superadmin LLYC) y actualiza la metadata en Firestore.
+    Desencadena de forma automatizada el Cloud Scheduler del cliente y un Backfill histórico de 90 días en segundo plano.
     """
     try:
         from app.services.mcp_analytics.secret_manager_service import SecretManagerService
@@ -1032,9 +1154,15 @@ async def save_tenant_secret_admin(
                 tenant_ref.update({"configured_secrets": configured_secrets})
                 logger.info(f"Metadata de secreto '{secret_type_clean}' actualizada en Firestore para '{tenant_id_clean}'.")
                 
+        # 3. Automatizar Creación/Actualización de Cloud Scheduler para el Tenant
+        create_or_update_tenant_scheduler(tenant_id_clean)
+        
+        # 4. Programar tarea de Backfill Histórico asíncrono (90 días) en segundo plano
+        background_tasks.add_task(run_historical_backfill_task, tenant_id_clean)
+        
         return {
             "status": "success",
-            "message": f"Secreto '{secret_type_clean}' guardado y encriptado con éxito para el tenant '{tenant_id_clean}'."
+            "message": f"Secreto '{secret_type_clean}' guardado con éxito. Se programó la automatización de Cloud Scheduler y el backfill histórico en segundo plano."
         }
         
     except Exception as e:
