@@ -1054,6 +1054,27 @@ async def create_or_update_tenant_admin(
 
 from fastapi import BackgroundTasks
 
+def update_deployment_status(tenant_id: str, status: str, step: str, message: str):
+    """
+    Actualiza de forma atómica el estado del despliegue en curso de un cliente en Firestore,
+    permitiendo al frontend auditar y pintar el estado de construcción en vivo.
+    """
+    try:
+        from app.services.auth_utils import TokenManager
+        tm = TokenManager()
+        if tm.db:
+            tm.db.collection("tenants").document(tenant_id).update({
+                "deployment_status": {
+                    "status": status,
+                    "step": step,
+                    "message": message,
+                    "updated_at": datetime.utcnow().isoformat()
+                }
+            })
+            logger.info(f"🔄 [DEPLOYMENT STATUS] Tenant '{tenant_id}' -> Status: {status} | Step: {step} | Msg: {message}")
+    except Exception as e:
+        logger.warning(f"No se pudo actualizar el estado de despliegue para '{tenant_id}': {e}")
+
 def create_or_update_tenant_scheduler(tenant_id: str):
     """
     Crea o actualiza de forma programática un Job en Cloud Scheduler para el tenant
@@ -1090,12 +1111,15 @@ def create_or_update_tenant_scheduler(tenant_id: str):
         try:
             client.update_job(job=job)
             logger.info(f"✅ Job de Cloud Scheduler '{job_id}' actualizado con éxito.")
+            update_deployment_status(tenant_id, "deploying", "Cloud Scheduler Configurado", f"Job '{job_id}' actualizado con éxito en Google Cloud.")
         except Exception:
             client.create_job(parent=parent, job=job)
             logger.info(f"✅ Job de Cloud Scheduler '{job_id}' creado con éxito.")
+            update_deployment_status(tenant_id, "deploying", "Cloud Scheduler Configurado", f"Job '{job_id}' creado con éxito en Google Cloud.")
             
     except Exception as e:
         logger.warning(f"No se pudo automatizar Cloud Scheduler para '{tenant_id}': {e}")
+        update_deployment_status(tenant_id, "deploying", "Cloud Scheduler Omitido", f"No se pudo configurar Cloud Scheduler: {e}. Continuando...")
 
 
 async def run_historical_backfill_task(tenant_id: str):
@@ -1104,6 +1128,7 @@ async def run_historical_backfill_task(tenant_id: str):
     en segundo plano a fin de poblar las tablas analíticas en BigQuery.
     """
     try:
+        update_deployment_status(tenant_id, "deploying", "Ejecutando Ingesta de Datos (90 días)", "Conectando en vivo con las APIs configuradas y poblando BigQuery de forma secuencial...")
         logger.info(f"🚀 Iniciando Backfill Histórico asíncrono (90 días) para '{tenant_id}'...")
         from datetime import datetime, timedelta
         from app.services.mcp_analytics.secret_manager_service import SecretManagerService
@@ -1127,8 +1152,10 @@ async def run_historical_backfill_task(tenant_id: str):
             date_to=date_to
         )
         logger.info(f"🏁 Backfill Histórico completado con éxito para '{tenant_id}'.")
+        update_deployment_status(tenant_id, "success", "Despliegue Completado con Éxito", "La infraestructura y el histórico de 90 días de Adobe/GA4 se cargaron perfectamente en BigQuery.")
     except Exception as e:
         logger.error(f"Error en el Backfill Histórico asíncrono de '{tenant_id}': {e}")
+        update_deployment_status(tenant_id, "failed", "Error en Despliegue", f"Falló la ingesta de datos del histórico: {e}")
 
 @router.post("/admin/tenants/{tenant_id}/secrets", response_model=Dict[str, Any])
 async def save_tenant_secret_admin(
@@ -1145,20 +1172,23 @@ async def save_tenant_secret_admin(
     try:
         from app.services.mcp_analytics.secret_manager_service import SecretManagerService
         sms = SecretManagerService()
-        
+
         tenant_id_clean = tenant_id.lower().strip()
         secret_type_clean = secret_req.secret_type.lower().strip()
-        
+
+        # Inicializar estado de despliegue en Firestore
+        update_deployment_status(tenant_id_clean, "deploying", "Iniciando Despliegue", f"Guardando clave '{secret_type_clean}' en GCP Secret Manager...")
+
         # 1. Guardar secreto en GCP Secret Manager
         success = sms.save_tenant_secret(
             tenant_id=tenant_id_clean,
             secret_type=secret_type_clean,
             secret_value=secret_req.secret_value
         )
-        
+
         if not success:
             raise Exception("No se pudo persistir el secreto en GCP Secret Manager.")
-            
+
         # 2. Actualizar de forma automatizada en Firestore que este secreto ya está configurado (cacheado de metadata)
         from app.services.auth_utils import TokenManager
         tm = TokenManager()
@@ -1173,20 +1203,21 @@ async def save_tenant_secret_admin(
                 configured_secrets[secret_type_clean] = True
                 tenant_ref.update({"configured_secrets": configured_secrets})
                 logger.info(f"Metadata de secreto '{secret_type_clean}' actualizada en Firestore para '{tenant_id_clean}'.")
-                
+
         # 3. Automatizar Creación/Actualización de Cloud Scheduler para el Tenant
         create_or_update_tenant_scheduler(tenant_id_clean)
-        
+
         # 4. Programar tarea de Backfill Histórico asíncrono (90 días) en segundo plano
         background_tasks.add_task(run_historical_backfill_task, tenant_id_clean)
-        
+
         return {
             "status": "success",
             "message": f"Secreto '{secret_type_clean}' guardado con éxito. Se programó la automatización de Cloud Scheduler y el backfill histórico en segundo plano."
         }
-        
+
     except Exception as e:
         logger.error(f"Error al guardar secreto de tenant en admin: {e}")
+        update_deployment_status(tenant_id_clean, "failed", "Error en Despliegue", f"No se pudo guardar la clave: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 class AdobeValidationRequest(BaseModel):
@@ -1382,19 +1413,23 @@ async def redeploy_tenant_etl_admin(
     """
     try:
         tenant_id_clean = tenant_id.lower().strip()
-        
+
+        # Inicializar estado de despliegue en Firestore
+        update_deployment_status(tenant_id_clean, "deploying", "Iniciando re-despliegue", "Fuerza el re-despliegue de Scheduler y encola un Backfill histórico de 90 días en segundo plano...")
+
         # 1. Re-crear Cloud Scheduler
         create_or_update_tenant_scheduler(tenant_id_clean)
-        
+
         # 2. Re-lanzar backfill histórico asíncrono
         background_tasks.add_task(run_historical_backfill_task, tenant_id_clean)
-        
+
         return {
             "status": "success",
             "message": f"Se re-desplegó con éxito el Scheduler y se encoló un nuevo Backfill de 90 días en segundo plano para '{tenant_id_clean}'."
         }
     except Exception as e:
         logger.error(f"Error al re-desplegar ETL para {tenant_id}: {e}")
+        update_deployment_status(tenant_id_clean, "failed", "Error en Despliegue", f"No se pudo re-desplegar: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/admin/tenants/{tenant_id}/logo", response_model=Dict[str, Any])

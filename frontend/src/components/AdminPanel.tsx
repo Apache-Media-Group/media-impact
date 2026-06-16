@@ -18,6 +18,12 @@ interface TenantConfig {
     'ga4-creds'?: boolean;
     'adobe-creds'?: boolean;
   };
+  deployment_status?: {
+    status?: 'deploying' | 'success' | 'failed';
+    step?: string;
+    message?: string;
+    updated_at?: string;
+  };
 }
 
 interface AdminPanelProps {
@@ -780,43 +786,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
               <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {tenants.map(t => {
                   const secrets = t.configured_secrets || {};
+                  const dep = t.deployment_status || {};
+                  const isDeploying = dep.status === 'deploying';
+                  
                   return (
-                    <div key={t.tenant_id} className="p-4 bg-white/[0.02] border border-white/5 rounded-xl flex items-center justify-between gap-4">
-                      <div>
-                        <h3 className="font-black text-xs uppercase tracking-wider text-white">{t.tenant_name}</h3>
-                        <span className="text-[9px] text-mid mb-2 block">ID: {t.tenant_id}</span>
-                        <button
-                          type="button"
-                          onClick={() => triggerDirectRedeploy(t.tenant_id)}
-                          disabled={redeploying}
-                          className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-navy border border-amber-500/20 rounded text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 disabled:opacity-50"
-                        >
-                          <RefreshCw className={`w-2.5 h-2.5 ${redeploying ? 'animate-spin' : ''}`} />
-                          {redeploying ? 'Re-desplegando...' : 'Re-desplegar ETL'}
-                        </button>
+                    <div key={t.tenant_id} className="p-4 bg-white/[0.02] border border-white/5 rounded-xl flex flex-col gap-3.5">
+                      <div className="flex items-center justify-between gap-4">
+                        <div>
+                          <h3 className="font-black text-xs uppercase tracking-wider text-white">{t.tenant_name}</h3>
+                          <span className="text-[9px] text-mid mb-2 block">ID: {t.tenant_id}</span>
+                          <button
+                            type="button"
+                            onClick={() => triggerDirectRedeploy(t.tenant_id)}
+                            disabled={isDeploying || redeploying}
+                            className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-navy border border-amber-500/20 rounded text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 disabled:opacity-50"
+                          >
+                            <RefreshCw className={`w-2.5 h-2.5 ${(isDeploying || redeploying) ? 'animate-spin' : ''}`} />
+                            {isDeploying ? 'Desplegando...' : 'Re-desplegar ETL'}
+                          </button>
+                        </div>
+                        <div className="flex gap-1.5 flex-wrap justify-end">
+                          <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                            secrets['ga4-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`} title={secrets['ga4-creds'] ? 'Configurado' : 'Sin Configurar'}>
+                            GA4
+                          </span>
+                          <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                            secrets['adobe-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`} title={secrets['adobe-creds'] ? 'Configurado' : 'Sin Configurar'}>
+                            Adobe
+                          </span>
+                          <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                            secrets['peec-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`} title={secrets['peec-key'] ? 'Configurado' : 'Sin Configurar'}>
+                            Peec
+                          </span>
+                          <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                            secrets['brandlight-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`} title={secrets['brandlight-key'] ? 'Configurado' : 'Sin Configurar'}>
+                            Brand
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex gap-1.5 flex-wrap justify-end">
-                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
-                          secrets['ga4-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
-                        }`} title={secrets['ga4-creds'] ? 'Configurado' : 'Sin Configurar'}>
-                          GA4
-                        </span>
-                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
-                          secrets['adobe-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
-                        }`} title={secrets['adobe-creds'] ? 'Configurado' : 'Sin Configurar'}>
-                          Adobe
-                        </span>
-                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
-                          secrets['peec-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
-                        }`} title={secrets['peec-key'] ? 'Configurado' : 'Sin Configurar'}>
-                          Peec
-                        </span>
-                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
-                          secrets['brandlight-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
-                        }`} title={secrets['brandlight-key'] ? 'Configurado' : 'Sin Configurar'}>
-                          Brand
-                        </span>
-                      </div>
+
+                      {/* Indicador de Despliegue en Tiempo Real (Current Deployment Status) */}
+                      {dep.status && (
+                        <div className={`p-3 rounded-lg text-[10px] flex flex-col gap-1 border ${
+                          dep.status === 'deploying' ? 'bg-blue-500/5 border-blue-500/20 text-blue-300' :
+                          dep.status === 'success' ? 'bg-emerald-500/5 border-emerald-500/20 text-emerald-300' :
+                          'bg-red-500/5 border-red-500/20 text-red-300'
+                        }`}>
+                          <div className="flex items-center gap-1.5 font-bold uppercase tracking-wide text-[9px]">
+                            {dep.status === 'deploying' && <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />}
+                            {dep.status === 'success' && <span className="text-emerald-400">✅</span>}
+                            {dep.status === 'failed' && <span className="text-red-400">❌</span>}
+                            <span>{dep.step}</span>
+                          </div>
+                          <p className="text-[9px] opacity-80 leading-relaxed font-mono break-all">{dep.message}</p>
+                          <span className="text-[8px] opacity-40 self-end">
+                            Sinc: {dep.updated_at ? new Date(dep.updated_at).toLocaleTimeString() : '--:--:--'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
