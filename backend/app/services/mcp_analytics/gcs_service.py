@@ -41,7 +41,7 @@ class GCSService:
         try:
             bucket = self.client.bucket(self.bucket_name)
             
-            # El nombre de archivo se normaliza según el tenant y tipo (ej: logos/sanitas.svg)
+            # El nombre de archivo se normaliza según el tenant y tipo (ej: logos/test.svg)
             ext = "png" if "png" in content_type else "svg"
             blob_name = f"logos/{tenant_id}.{ext}".lower().strip()
             blob = bucket.blob(blob_name)

@@ -32,6 +32,7 @@ class BrandlightService(AnalyticsService):
         if not self.api_key:
             raise ValueError("API Key o Token requerido para la conexión con Brandlight.")
             
+        self.tenant_id = credentials.get("tenant_id") or "default-brand"
         self.base_url = "https://bi.brandlight.ai/v1"
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -66,23 +67,46 @@ class BrandlightService(AnalyticsService):
 
     async def _request(self, method: str, endpoint: str, params: Optional[Dict[str, Any]] = None, data: Optional[Dict[str, Any]] = None) -> Any:
         """
-        Realiza una petición asíncrona hacia la API de Brandlight respetando el Rate Limit de 1.5s.
+        Realiza una petición asíncrona hacia la API de Brandlight con soporte para Exponential Backoff en caso de 429.
         """
-        # Delay de seguridad preventivo para evitar Throttling de la API de Brandlight
+        # Delay de seguridad preventivo inicial
         await asyncio.sleep(1.5)
         
         url = f"{self.base_url}{endpoint}"
+        max_retries = 25
+        base_delay = 4.0
+        
         async with aiohttp.ClientSession() as session:
-            try:
-                async with session.request(method, url, headers=self.headers, params=params, json=data) as response:
-                    logger.info(f"Brandlight API Request: {method} {url} - Status: {response.status}")
-                    if response.status == 401:
-                        raise ValueError("No autorizado: Clave API de Brandlight inválida o vencida.")
-                    response.raise_for_status()
-                    return await response.json()
-            except Exception as e:
-                logger.error(f"Error al conectar con la API de Brandlight en {endpoint}: {e}")
-                raise e
+            for attempt in range(max_retries):
+                try:
+                    async with session.request(method, url, headers=self.headers, params=params, json=data) as response:
+                        logger.info(f"Brandlight API Request: {method} {url} - Status: {response.status}")
+                        
+                        if response.status == 200:
+                            return await response.json()
+                            
+                        elif response.status == 401:
+                            raise ValueError("No autorizado: Clave API de Brandlight inválida o vencida.")
+                            
+                        elif response.status == 429:
+                            import random
+                            delay = min(60.0, (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5))
+                            logger.warning(f"⚠️ Brandlight Rate Limit (429) detectado en intento {attempt+1}/{max_retries}. Durmiendo {delay:.2f}s antes de reintentar...")
+                            await asyncio.sleep(delay)
+                            continue
+                            
+                        else:
+                            response.raise_for_status()
+                except Exception as e:
+                    if "401" in str(e) or isinstance(e, ValueError):
+                        raise e
+                    if attempt == max_retries - 1:
+                        logger.error(f"Error final al conectar con la API de Brandlight en {endpoint}: {e}")
+                        raise e
+                    delay_err = min(60.0, base_delay * (2 ** attempt))
+                    await asyncio.sleep(delay_err)
+                    
+            raise Exception("Brandlight: Límite de reintentos agotado tras recibir continuos códigos 429 (Too Many Requests).")
 
     async def list_accounts(self) -> List[GAAccount]:
         """
@@ -90,23 +114,30 @@ class BrandlightService(AnalyticsService):
         """
         try:
             res = await self._request("GET", "/brands")
-            brands_data = res.get("data", [])
+            
+            brands_data = []
+            if isinstance(res, list):
+                brands_data = res
+            elif isinstance(res, dict):
+                brands_data = res.get("data", []) or res.get("brands", []) or res.get("content", []) or [res]
             
             accounts = []
             for brand in brands_data:
-                brand_id = brand.get("id") or brand.get("name")
-                accounts.append(
-                    GAAccount(
-                        account_id=brand_id,
-                        name=f"accounts/{brand_id}",
-                        display_name=brand.get("name", brand_id).capitalize()
-                    )
-                )
+                if isinstance(brand, dict):
+                    brand_id = brand.get("id") or brand.get("name")
+                    if brand_id:
+                        accounts.append(
+                            GAAccount(
+                                account_id=brand_id,
+                                name=f"accounts/{brand_id}",
+                                display_name=brand.get("name", brand_id).capitalize()
+                            )
+                        )
             
             if not accounts:
                 # Fallback de marca en modo demostración si no hay marcas devueltas
                 return [
-                    GAAccount(account_id="sanitas", name="accounts/sanitas", display_name="Sanitas"),
+                    GAAccount(account_id="brand-demo", name="accounts/brand-demo", display_name="Brand Demo"),
                     GAAccount(account_id="llyc", name="accounts/llyc", display_name="LLYC Analytics")
                 ]
                 
@@ -114,7 +145,7 @@ class BrandlightService(AnalyticsService):
         except Exception as e:
             logger.warning(f"Error en list_accounts de Brandlight (usando fallbacks locales): {e}")
             return [
-                GAAccount(account_id="sanitas", name="accounts/sanitas", display_name="Sanitas España"),
+                GAAccount(account_id="brand-demo", name="accounts/brand-demo", display_name="Brand Demo España"),
                 GAAccount(account_id="llyc", name="accounts/llyc", display_name="LLYC Analytics")
             ]
 
@@ -164,7 +195,16 @@ class BrandlightService(AnalyticsService):
         """
         Ejecuta consultas tabulares mapeando peticiones de métricas a los reportes de Visibilidad y SoV de Brandlight.
         """
-        brand_name = request.connection_id or "sanitas" # o usar un mapper
+        brand_name = self.tenant_id
+        if not brand_name or brand_name in ["default-brand", "test"]:
+            try:
+                brands = await self.list_accounts()
+                if brands:
+                    brand_name = brands[0].account_id
+                    logger.info(f"Brandlight: Marca descubierta automáticamente vía API Key: '{brand_name}'")
+            except Exception as e:
+                logger.warning(f"Error al descubrir marca de Brandlight automáticamente: {e}")
+                
         location = request.property_id.split("/")[-1] # ej: ES, MX
         
         # Parseo de fechas GA4 a YYYY-MM-DD
@@ -184,17 +224,37 @@ class BrandlightService(AnalyticsService):
             )
             live_data_fetched = True
             
-            # Procesar filas de visibilidad
-            # Brandlight devuelve scores para la marca y competidores
-            # Mapeamos a estructura tabular plana
-            scores_data = res_vis.get("data", {}).get("scores", []) or res_vis.get("scores", [])
-            for s in scores_data:
-                rows.append({
-                    "date": s.get("date", end_date),
-                    "domain": s.get("domain", brand_name),
-                    "visibility_score": str(s.get("score", 0)),
-                    "sentiment_score": str(round(s.get("sentiment", 7.5), 1))
-                })
+            # Procesar informes de visibilidad según la especificación oficial (data: [{"reportDate": "...", "scores": [...]}]):
+            reports = []
+            if isinstance(res_vis, dict):
+                reports = res_vis.get("data") or []
+                if not isinstance(reports, list):
+                    reports = [res_vis]
+            elif isinstance(res_vis, list):
+                reports = res_vis
+                
+            for r in reports:
+                if isinstance(r, dict):
+                    report_date = r.get("reportDate") or r.get("date") or end_date
+                    if report_date and "T" in report_date:
+                        report_date = report_date.split("T")[0]
+                        
+                    scores = r.get("scores", []) or []
+                    if not isinstance(scores, list):
+                        scores = [scores]
+                        
+                    for s in scores:
+                        if isinstance(s, dict):
+                            domain_name = s.get("name") or s.get("domain") or brand_name
+                            v_score = s.get("visibilityScore") or s.get("score") or s.get("visibility") or s.get("visibility_score")
+                            s_score = s.get("sentimentScore") or s.get("sentiment") or s.get("sentiment_score")
+                            
+                            rows.append({
+                                "date": report_date,
+                                "domain": domain_name,
+                                "visibility_score": str(v_score) if v_score is not None else "0.0",
+                                "sentiment_score": str(s_score) if s_score is not None else "0.0"
+                            })
                 
         except Exception as e:
             logger.error(f"Error consultando la API de Brandlight: {e}")

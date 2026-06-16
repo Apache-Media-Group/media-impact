@@ -305,8 +305,8 @@ class AdobeAnalyticsService(AnalyticsService):
 
         headers = self._get_headers(token, content_type="application/json")
         url = f"{self.base_url}/{company_id}/reports"
-        max_retries = 5
-        base_delay = 2.0
+        max_retries = 25
+        base_delay = 4.0
 
         async with aiohttp.ClientSession() as session:
             for attempt in range(max_retries):
@@ -324,7 +324,7 @@ class AdobeAnalyticsService(AnalyticsService):
                     
                     elif resp.status == 429:
                         import random
-                        delay = (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5)
+                        delay = min(60.0, (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5))
                         logger.warning(f"⚠️ Adobe API Rate Limit (429) detectado en intento {attempt+1}/{max_retries}. Durmiendo {delay:.2f}s antes de reintentar para dar respiro...")
                         await asyncio.sleep(delay)
                     
@@ -395,10 +395,10 @@ class AdobeAnalyticsService(AnalyticsService):
         total_sessions_abs = int(sum(float(r.get("sessions", 0)) for r in report_total.rows))
         total_conversions_abs = sum(float(r.get(conversion_metric, 0)) for r in report_total.rows)
 
-        # Si no hay conversiones con la métrica por defecto (Orders), intentamos un fallback a IDs reales de Sanitas
+        # Si no hay conversiones con la métrica por defecto (Orders), intentamos un fallback a IDs de eventos reales
         if total_conversions_abs == 0:
             try:
-                # Sanitas usa event78 como métrica de éxito principal para IA
+                # Usar event78 como métrica de éxito principal para IA
                 fallback_metrics = ["metrics/event78", "metrics/event13", "metrics/event12", "metrics/event14", "metrics/event29", "metrics/event7", "metrics/event1"]
                 for fb_metric in fallback_metrics:
                     logger.info(f"Attempting fallback to {fb_metric}...")

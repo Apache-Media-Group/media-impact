@@ -57,14 +57,14 @@ async def get_tenant_config(request: Request, tenant: Optional[str] = Query(None
     Obtiene la configuración visual y de branding de forma dinámica según el subdominio
     o parámetro de consulta (estrategia híbrida), consultando en Firestore con fallback a local.
     """
-    # 1. Intentar obtener el tenant desde el host (ej: sanitas.dashboard.llyc.global)
+    # 1. Intentar obtener el tenant desde el host (ej: cliente.dashboard.llyc.global)
     host = request.headers.get("host", "")
     detected_tenant = None
     
     # Si contiene subdominios y no es localhost, extraer el primer segmento
     if host and "localhost" not in host and "127.0.0.1" not in host:
         parts = host.split(".")
-        if len(parts) > 2:  # Ej: sanitas.dashboard.llyc.global -> ['sanitas', 'dashboard', 'llyc', 'global']
+        if len(parts) > 2:  # Ej: cliente.dashboard.llyc.global -> ['cliente', 'dashboard', 'llyc', 'global']
             detected_tenant = parts[0].lower().strip()
             
     # 2. Si no se detectó o se pasa como Query (híbrido para demos), usar el parámetro query
@@ -902,8 +902,8 @@ async def explain_engagement_score(
 from pydantic import Field
 
 class TenantAdminRequest(BaseModel):
-    tenant_id: str = Field(..., description="ID del tenant en minúsculas y sin espacios (ej: 'sanitas')")
-    tenant_name: str = Field(..., description="Nombre comercial visible (ej: 'Sanitas España')")
+    tenant_id: str = Field(..., description="ID del tenant en minúsculas y sin espacios (ej: 'test')")
+    tenant_name: str = Field(..., description="Nombre comercial visible (ej: 'LLYC España')")
     logo_url: str = Field(..., description="URL del logo en SVG/PNG")
     primary_color: str = Field(..., description="Color primario hexadecimal (ej: '#0070B0')")
     secondary_color: str = Field(..., description="Color secundario hexadecimal (ej: '#00A2E2')")
@@ -1453,7 +1453,7 @@ async def upload_tenant_logo_admin(
         raise HTTPException(status_code=500, detail=str(e))
 
 class ETLTriggerRequest(BaseModel):
-    tenant_id: str = Field(..., description="ID del tenant a sincronizar (ej: 'sanitas')")
+    tenant_id: str = Field(..., description="ID del tenant a sincronizar (ej: 'test')")
     historical_backfill: bool = Field(default=False, description="Si es True, realiza un backfill histórico (ej. últimos 90 días). Si es False, es un incremento de 2 días.")
 
 @router.post("/admin/etl/trigger", response_model=Dict[str, Any])

@@ -196,7 +196,10 @@ class MCPETLService:
                 for seg in segment_loops:
                     seg_id = seg["id"]
                     logger.info(f"Ejecutando ETL Adobe para segmento: '{seg['name']}' ({seg_id})...")
-                    
+
+                    # Espacio de respiro proactivo (1.5 segundos) entre peticiones de segmentos
+                    await asyncio.sleep(1.5)
+
                     # Crear petición estructurada de reporte filtrada por este segmento
                     req = RunReportRequest(
                         property_id=chosen_property,
@@ -285,8 +288,12 @@ class MCPETLService:
         brandlight_creds_raw = credentials.get("brandlight-key")
         visibility_rows = []
         if brandlight_creds_raw:
+            # Pausa de respiro de 30 segundos antes de comenzar Brandlight BI
+            await asyncio.sleep(30.0)
             try:
                 parsed_creds = self._parse_credentials("brandlight-key", brandlight_creds_raw)
+                if isinstance(parsed_creds, dict):
+                    parsed_creds["tenant_id"] = self.tenant_id
                 brandlight_service = BrandlightService(credentials=parsed_creds)
                 req = RunReportRequest(
                     property_id="properties/ES",
