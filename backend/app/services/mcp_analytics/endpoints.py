@@ -1194,6 +1194,76 @@ class AdobeValidationRequest(BaseModel):
     client_secret: str
     org_id: str
 
+class GA4ValidationRequest(BaseModel):
+    credentials_json: str
+
+@router.post("/admin/tenants/validate-ga4-credentials", response_model=Dict[str, Any])
+async def validate_ga4_credentials_admin(
+    req: GA4ValidationRequest,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Valida las credenciales JSON de GA4 (OAuth o Service Account) y retorna la lista de Cuentas y Propiedades disponibles.
+    """
+    try:
+        from app.services.mcp_analytics.etl_service import MCPETLService
+        from app.services.mcp_analytics.ga_service import GAService
+        from app.services.mcp_analytics.ga_admin_service import GAAdminService
+        
+        etl = MCPETLService(tenant_id="temp")
+        parsed_creds = etl._parse_credentials("ga4-creds", req.credentials_json)
+        
+        # Instanciar el servicio analítico de Google
+        ga_service = GAService(credentials=parsed_creds)
+        admin_service = GAAdminService(credentials=parsed_creds)
+        
+        # 1. Recuperar cuentas de GA4 usando el admin service
+        accounts = await admin_service.list_accounts()
+        accounts_list = [{"id": acc.account_id, "name": acc.display_name} for acc in accounts]
+        
+        # 2. Recuperar propiedades de la primera cuenta por defecto
+        properties_list = []
+        if accounts_list:
+            first_acc_id = accounts_list[0]["id"]
+            properties = await admin_service.list_properties(account_id=first_acc_id)
+            properties_list = [{"id": prop.property_id, "name": prop.display_name} for prop in properties]
+            
+        return {
+            "status": "success",
+            "accounts": accounts_list,
+            "properties": properties_list
+        }
+    except Exception as e:
+        logger.error(f"Error al validar credenciales de GA4 en admin: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/admin/tenants/validate-ga4-properties", response_model=Dict[str, Any])
+async def validate_ga4_properties_admin(
+    credentials_json: str,
+    account_id: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Retorna la lista de Propiedades de GA4 disponibles para una cuenta de Google específica.
+    """
+    try:
+        from app.services.mcp_analytics.etl_service import MCPETLService
+        from app.services.mcp_analytics.ga_admin_service import GAAdminService
+        
+        etl = MCPETLService(tenant_id="temp")
+        parsed_creds = etl._parse_credentials("ga4-creds", credentials_json)
+        
+        admin_service = GAAdminService(credentials=parsed_creds)
+        properties = await admin_service.list_properties(account_id=account_id)
+        properties_list = [{"id": prop.property_id, "name": prop.display_name} for prop in properties]
+        return {
+            "status": "success",
+            "properties": properties_list
+        }
+    except Exception as e:
+        logger.error(f"Error al listar propiedades de GA4 en validación: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.post("/admin/tenants/validate-adobe-credentials", response_model=Dict[str, Any])
 async def validate_adobe_credentials_admin(
     req: AdobeValidationRequest,

@@ -52,6 +52,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
   const [selectedAdobeSuite, setSelectedAdobeSuite] = useState('');
   const [selectedAdobeSegment, setSelectedAdobeSegment] = useState('');
 
+  // Estados para validación e inyección estructurada de GA4
+  const [ga4AccountsList, setGa4AccountsList] = useState<any[]>([]);
+  const [ga4PropertiesList, setGa4PropertiesList] = useState<any[]>([]);
+  const [validatingGa4, setValidatingGa4] = useState(false);
+  const [selectedGa4Account, setSelectedGa4Account] = useState('');
+  const [selectedGa4Property, setSelectedGa4Property] = useState('');
+
   const [showSecretModal, setShowSecretModal] = useState(false);
   const [redeploying, setRedeploying] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -263,15 +270,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
     e.preventDefault();
     if (!secretTenantId) return;
 
-    const finalSecretValue = secretType === 'adobe-creds'
-      ? JSON.stringify({
-          client_id: adobeClientId.trim(),
-          client_secret: adobeClientSecret.trim(),
-          org_id: adobeOrgId.trim(),
-          company_id: selectedAdobeCompany || undefined,
-          property_id: selectedAdobeSuite || undefined
-        })
-      : secretValue;
+    let finalSecretValue = secretValue;
+
+    if (secretType === 'adobe-creds') {
+      finalSecretValue = JSON.stringify({
+        client_id: adobeClientId.trim(),
+        client_secret: adobeClientSecret.trim(),
+        org_id: adobeOrgId.trim(),
+        company_id: selectedAdobeCompany || undefined,
+        property_id: selectedAdobeSuite || undefined,
+        segment_id: selectedAdobeSegment || undefined
+      });
+    } else if (secretType === 'ga4-creds' && selectedGa4Property) {
+      try {
+        const parsed = JSON.parse(secretValue.trim());
+        parsed.account_id = selectedGa4Account;
+        parsed.property_id = selectedGa4Property;
+        finalSecretValue = JSON.stringify(parsed);
+      } catch (err) {
+        console.warn("Pasted secret is not valid JSON, keeping as is:", err);
+      }
+    }
 
     if (!finalSecretValue) return;
 
@@ -333,8 +352,80 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
     setSelectedAdobeCompany('');
     setSelectedAdobeSuite('');
     setSelectedAdobeSegment('');
+    setGa4AccountsList([]);
+    setGa4PropertiesList([]);
+    setSelectedGa4Account('');
+    setSelectedGa4Property('');
     setRedeploying(false);
     setShowSecretModal(true);
+  };
+
+  const handleValidateGa4Credentials = async () => {
+    if (!secretValue) {
+      alert("Por favor pega el JSON de credenciales de Google para validar.");
+      return;
+    }
+    
+    try {
+      setValidatingGa4(true);
+      setMessage(null);
+      
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-ga4-credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          credentials_json: secretValue.trim()
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setGa4AccountsList(data.accounts || []);
+        setGa4PropertiesList(data.properties || []);
+        
+        if (data.accounts && data.accounts.length > 0) {
+          setSelectedGa4Account(data.accounts[0].id);
+        }
+        if (data.properties && data.properties.length > 0) {
+          setSelectedGa4Property(data.properties[0].id);
+        }
+        
+        setMessage({
+          type: 'success',
+          text: `Credenciales de Google validadas con éxito. Se encontraron ${data.accounts?.length || 0} cuentas y ${data.properties?.length || 0} propiedades de GA4.`
+        });
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || "Fallo en la autenticación con Google Analytics API.");
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Error al conectar con el servicio de validación de Google' });
+    } finally {
+      setValidatingGa4(false);
+    }
+  };
+
+  const handleGa4AccountChange = async (accountId: string) => {
+    setSelectedGa4Account(accountId);
+    setSelectedGa4Property('');
+    setGa4PropertiesList([]);
+    
+    try {
+      setValidatingGa4(true);
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-ga4-properties?credentials_json=${encodeURIComponent(secretValue.trim())}&account_id=${encodeURIComponent(accountId)}`);
+      
+      if (res.ok) {
+        const data = await res.json();
+        setGa4PropertiesList(data.properties || []);
+        if (data.properties && data.properties.length > 0) {
+          setSelectedGa4Property(data.properties[0].id);
+        }
+      }
+    } catch (err: any) {
+      console.error("Error loading properties for GA4 account:", err);
+    } finally {
+      setValidatingGa4(false);
+    }
   };
 
   const handleValidateAdobeCredentials = async () => {
@@ -1165,15 +1256,63 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                 </div>
               ) : (
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Valor de la Llave Secreta (API Key / Token)</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Valor de la Llave Secreta (API Key / Token / JSON)</label>
                   <textarea 
                     value={secretValue}
                     onChange={(e) => setSecretValue(e.target.value)}
-                    placeholder="Pega aquí la clave secreta obtenida del proveedor analítico..."
+                    placeholder={secretType === 'ga4-creds' ? "Pega aquí las credenciales JSON de Google..." : "Pega aquí la clave secreta obtenida del proveedor analítico..."}
                     required
                     rows={4}
                     className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
                   />
+                  
+                  {secretType === 'ga4-creds' && (
+                    <div className="space-y-4 mt-4 border-l-2 border-teal pl-4">
+                      {/* Botón para validar GA4 */}
+                      <button
+                        type="button"
+                        onClick={handleValidateGa4Credentials}
+                        disabled={validatingGa4 || !secretValue}
+                        className="px-4 py-2 bg-gradient-to-r from-teal to-[#0d9488] text-navy hover:from-[#0d9488] hover:to-[#0f766e] rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${validatingGa4 ? 'animate-spin' : ''}`} />
+                        {validatingGa4 ? 'Validando...' : '🔍 Validar y Cargar Propiedades de Google'}
+                      </button>
+                      
+                      {/* Dropdowns de Cuentas y Propiedades de GA4 */}
+                      {ga4AccountsList.length > 0 && (
+                        <div className="space-y-4 pt-3 border-t border-white/5">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-teal">Cuenta Google Seleccionada</label>
+                            <select 
+                              value={selectedGa4Account}
+                              onChange={(e) => handleGa4AccountChange(e.target.value)}
+                              className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold"
+                            >
+                              {ga4AccountsList.map(a => (
+                                <option key={a.id} value={a.id}>{a.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          {ga4PropertiesList.length > 0 && (
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-red">Propiedad GA4 (Para ETL)</label>
+                              <select 
+                                value={selectedGa4Property}
+                                onChange={(e) => setSelectedGa4Property(e.target.value)}
+                                className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold text-red"
+                              >
+                                {ga4PropertiesList.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
