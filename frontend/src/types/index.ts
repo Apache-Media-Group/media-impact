@@ -6,6 +6,8 @@ export interface AnalyticsState {
   connection_id: string;
   property_id: string;
   session_id?: string;
+  account_id?: string;
+  segment_id?: string;
 }
 
 export interface ApiResponse {

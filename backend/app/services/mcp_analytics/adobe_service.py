@@ -106,6 +106,8 @@ class AdobeAnalyticsService(AnalyticsService):
         return d
 
     async def _get_access_token(self):
+        if self.client_id == "adobe-temp":
+            return "mock-access-token"
         if self.refresh_token and self.client_id and self.client_secret:
             url = "https://ims-na1.adobelogin.com/ims/token/v3"
             payload = {"grant_type": "refresh_token", "client_id": self.client_id, "client_secret": self.client_secret, "refresh_token": self.refresh_token}
@@ -129,6 +131,8 @@ class AdobeAnalyticsService(AnalyticsService):
         raise Exception("Adobe: No valid credentials available.")
 
     async def _get_company_id(self) -> str:
+        if self.client_id == "adobe-temp":
+            return "company-test-1"
         if self.company_id: return self.company_id
         
         accounts = await self.list_accounts()
@@ -139,6 +143,11 @@ class AdobeAnalyticsService(AnalyticsService):
         raise Exception("Adobe: No Global Company ID found.")
 
     async def list_accounts(self) -> List[GAAccount]:
+        if self.client_id == "adobe-temp":
+            return [
+                GAAccount(name="companies/company-test-1", display_name="LLYC España Compañía de Pruebas", account_id="company-test-1"),
+                GAAccount(name="companies/company-test-2", display_name="LLYC Latam Compañía Demo", account_id="company-test-2")
+            ]
         try:
             token = await self._get_access_token()
             headers = self._get_headers(token)
@@ -175,6 +184,11 @@ class AdobeAnalyticsService(AnalyticsService):
             raise e
 
     async def list_properties(self, account_id: Optional[str] = None) -> List[GAProperty]:
+        if self.client_id == "adobe-temp":
+            return [
+                GAProperty(name="rs-llyc-es-corp", display_name="LLYC España Corporativo Suite (rs-llyc-es-corp)", property_id="rs-llyc-es-corp", parent="accounts/company-test-1"),
+                GAProperty(name="rs-llyc-mx-mkt", display_name="LLYC México Marketing Suite (rs-llyc-mx-mkt)", property_id="rs-llyc-mx-mkt", parent="accounts/company-test-1")
+            ]
         try:
             token = await self._get_access_token()
             company_id = account_id or await self._get_company_id()
@@ -192,6 +206,12 @@ class AdobeAnalyticsService(AnalyticsService):
         """
         Lists all available segments for a given report suite.
         """
+        if self.client_id == "adobe-temp":
+            return [
+                {"id": "seg-llyc-organic-seo", "name": "Búsqueda Orgánica SEO (Google/Bing)"},
+                {"id": "seg-llyc-ai-referred", "name": "Tráfico Referido por Motores IA (ChatGPT)"},
+                {"id": "seg-llyc-social-media", "name": "Redes Sociales (LinkedIn/Twitter)"}
+            ]
         try:
             token = await self._get_access_token()
             company_id = await self._get_company_id()

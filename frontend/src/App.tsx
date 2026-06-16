@@ -161,6 +161,123 @@ const App: React.FC = () => {
     support_email: 'intelligence.mcp@llyc.global'
   });
 
+  // Orígenes de datos, Cuentas, Propiedades y Segmentos
+  const [connections, setConnections] = useState<any[]>([
+    { connection_id: 'local', display_name: 'Google Analytics 4 (Local/Demo)', platform: 'GA4' },
+    { connection_id: 'adobe-temp', display_name: 'Adobe Analytics (Test Sandbox)', platform: 'ADOBE_ANALYTICS' },
+    { connection_id: 'peec-temp', display_name: 'Peec.ai (Test Sandbox)', platform: 'PEEC' }
+  ]);
+  const [accounts, setAccounts] = useState<any[]>([]);
+  const [properties, setProperties] = useState<any[]>([]);
+  const [segments, setSegments] = useState<any[]>([]);
+
+  // 1. Efecto secundario dinámico para buscar si este Tenant tiene conexiones personalizadas en GCP Secret Manager
+  useEffect(() => {
+    if (tenant?.configured_secrets) {
+      const list: any[] = [];
+      const sec = tenant.configured_secrets;
+      if (sec['ga4-creds'] || true) { // Siempre dar la opción local de GA4 por defecto
+        list.push({ connection_id: 'local', display_name: 'Google Analytics 4', platform: 'GA4' });
+      }
+      if (sec['adobe-creds']) {
+        list.push({ connection_id: 'adobe-temp', display_name: 'Adobe Analytics (GCP CRM)', platform: 'ADOBE_ANALYTICS' });
+      } else {
+        // Permitir de igual manera la conexión de pruebas para Adobe si no hay credenciales productivas
+        list.push({ connection_id: 'adobe-temp', display_name: 'Adobe Analytics (Test Sandbox)', platform: 'ADOBE_ANALYTICS' });
+      }
+      if (sec['peec-key']) {
+        list.push({ connection_id: 'peec-temp', display_name: 'Peec.ai (Comportamiento)', platform: 'PEEC' });
+      } else {
+        list.push({ connection_id: 'peec-temp', display_name: 'Peec.ai (Test Sandbox)', platform: 'PEEC' });
+      }
+      setConnections(list);
+    }
+  }, [tenant]);
+
+  // Cargar cuentas cuando cambia la conexión/origen
+  const handleConnectionChange = async (connId: string) => {
+    updateState({ connection_id: connId, account_id: '', property_id: '', segment_id: '' });
+    setAccounts([]);
+    setProperties([]);
+    setSegments([]);
+
+    if (!connId) return;
+
+    try {
+      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'http://localhost:8080' 
+        : '';
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/accounts?connection_id=${connId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const loadedAccounts = data.accounts || [];
+        setAccounts(loadedAccounts);
+        
+        // Seleccionar cuenta por defecto e iniciar cascada
+        if (loadedAccounts.length > 0) {
+          const firstAcc = loadedAccounts[0].account_id;
+          updateState({ connection_id: connId, account_id: firstAcc, property_id: '', segment_id: '' });
+          handleAccountChange(connId, firstAcc);
+        }
+      }
+    } catch (e) {
+      console.error("Error loading accounts:", e);
+    }
+  };
+
+  // Cargar propiedades cuando cambia la cuenta
+  const handleAccountChange = async (connId: string, accId: string) => {
+    updateState({ account_id: accId, property_id: '', segment_id: '' });
+    setProperties([]);
+    setSegments([]);
+
+    if (!connId || !accId) return;
+
+    try {
+      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'http://localhost:8080' 
+        : '';
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/properties?connection_id=${connId}&account_id=${accId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const loadedProperties = data.properties || [];
+        setProperties(loadedProperties);
+        
+        // Seleccionar propiedad por defecto e iniciar cascada de segmentos si es Adobe
+        if (loadedProperties.length > 0) {
+          const firstProp = loadedProperties[0].property_id;
+          updateState({ account_id: accId, property_id: firstProp, segment_id: '' });
+          if (connId.toLowerCase().includes('adobe')) {
+            handlePropertyChange(connId, firstProp);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Error loading properties:", e);
+    }
+  };
+
+  // Cargar segmentos cuando cambia la propiedad/suite de Adobe
+  const handlePropertyChange = async (connId: string, propId: string) => {
+    updateState({ property_id: propId, segment_id: '' });
+    setSegments([]);
+
+    if (!connId || !propId) return;
+
+    try {
+      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'http://localhost:8080' 
+        : '';
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/adobe/segments/${propId}?connection_id=${connId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSegments(data.segments || []);
+      }
+    } catch (e) {
+      console.error("Error loading segments:", e);
+    }
+  };
+
   // 0. Efecto para cargar dinámicamente la configuración visual del Tenant (Sanitas, LLYC, etc.)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -296,14 +413,14 @@ const App: React.FC = () => {
 
   const handleSelectAdobe = (creds: any) => {
     console.log("Adobe Creds:", creds);
-    updateState({ connection_id: 'adobe-temp' });
     setShowDashboard(true);
+    handleConnectionChange('adobe-temp');
   };
 
   const handleSelectPeec = (apiKey: string) => {
     console.log("Peec API Key:", apiKey);
-    updateState({ connection_id: 'peec-temp', property_id: 'peec-proj-1' });
     setShowDashboard(true);
+    handleConnectionChange('peec-temp');
   };
 
   const handleFileUpload = async (file: File) => {
@@ -446,10 +563,16 @@ const App: React.FC = () => {
         lastUpdated={lastUpdated} 
         tenant={tenant}
       />
-      <FilterBar 
-        state={state} 
-        updateState={updateState} 
-        onApply={handleApplyFilters} 
+      <FilterBar
+        state={state}
+        updateState={updateState}
+        onApply={handleApplyFilters}
+        connections={connections}
+        accounts={accounts}
+        properties={properties}
+        segments={segments}
+        onConnectionChange={handleConnectionChange}
+        onAccountChange={(accId) => handleAccountChange(state.connection_id, accId)}
       />
 
       <main ref={dashboardRef} className="flex-1 p-8 space-y-6 max-w-[1400px] mx-auto w-full">

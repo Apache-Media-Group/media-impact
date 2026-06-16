@@ -13,6 +13,8 @@ export const useAnalytics = () => {
     to: '2025-04-30',
     connection_id: '',
     property_id: '',
+    account_id: '',
+    segment_id: '',
   });
 
   const [data, setData] = useState<ApiResponse | null>(null);
@@ -35,7 +37,8 @@ export const useAnalytics = () => {
           session_id: currentState.session_id,
           start_date: currentState.from,
           end_date: currentState.to,
-          market: currentState.market
+          market: currentState.market,
+          segment_id: currentState.segment_id || undefined
         })
       });
 

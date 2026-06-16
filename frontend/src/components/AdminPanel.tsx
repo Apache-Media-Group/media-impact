@@ -39,6 +39,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
   const [secretTenantId, setSecretTenantId] = useState<string | null>(null);
   const [secretType, setSecretType] = useState('brandlight-key');
   const [secretValue, setSecretValue] = useState('');
+  
+  // Estados para credenciales estructuradas de Adobe Analytics (Client ID, Secret, Org ID)
+  const [adobeClientId, setAdobeClientId] = useState('');
+  const [adobeClientSecret, setAdobeClientSecret] = useState('');
+  const [adobeOrgId, setAdobeOrgId] = useState('');
+
   const [showSecretModal, setShowSecretModal] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [adminEmail] = useState(localStorage.getItem('admin_user_email') || 'consultor@llyc.global');
@@ -247,7 +253,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
 
   const handleSaveSecret = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!secretTenantId || !secretValue) return;
+    if (!secretTenantId) return;
+
+    const finalSecretValue = secretType === 'adobe-creds'
+      ? JSON.stringify({
+          client_id: adobeClientId.trim(),
+          client_secret: adobeClientSecret.trim(),
+          org_id: adobeOrgId.trim()
+        })
+      : secretValue;
+
+    if (!finalSecretValue) return;
 
     try {
       setSaving(true);
@@ -255,7 +271,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
       const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${secretTenantId}/secrets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ secret_type: secretType, secret_value: secretValue })
+        body: JSON.stringify({ secret_type: secretType, secret_value: finalSecretValue })
       });
 
       if (res.ok) {
@@ -298,6 +314,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
     setSecretTenantId(tenantId);
     setSecretType('brandlight-key');
     setSecretValue('');
+    setAdobeClientId('');
+    setAdobeClientSecret('');
+    setAdobeOrgId('');
     setShowSecretModal(true);
   };
 
@@ -849,21 +868,59 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                   <option value="brandlight-key">Brandlight BI API Key (Visibilidad / SoV)</option>
                   <option value="peec-key">Peec.ai API Token (Comportamiento de IA)</option>
                   <option value="ga4-creds">GA4 OAuth Token JSON (Sesiones de Google)</option>
-                  <option value="adobe-creds">Adobe Analytics API Client Secret</option>
+                  <option value="adobe-creds">Adobe Analytics API Credentials (3 Campos)</option>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Valor de la Llave Secreta (API Key / Token)</label>
-                <textarea 
-                  value={secretValue}
-                  onChange={(e) => setSecretValue(e.target.value)}
-                  placeholder="Pega aquí la clave secreta obtenida del proveedor analítico..."
-                  required
-                  rows={4}
-                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
-                />
-              </div>
+              {secretType === 'adobe-creds' ? (
+                <div className="space-y-4 border-l-2 border-red pl-4">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Adobe Client ID (API Key)</label>
+                    <input 
+                      type="text" 
+                      value={adobeClientId}
+                      onChange={(e) => setAdobeClientId(e.target.value)}
+                      placeholder="ej: e6c7619213194a289f81f18..."
+                      required
+                      className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Adobe Client Secret</label>
+                    <input 
+                      type="password" 
+                      value={adobeClientSecret}
+                      onChange={(e) => setAdobeClientSecret(e.target.value)}
+                      placeholder="Pega aquí el Client Secret de Adobe..."
+                      required
+                      className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Adobe Organization ID (IMS Org ID)</label>
+                    <input 
+                      type="text" 
+                      value={adobeOrgId}
+                      onChange={(e) => setAdobeOrgId(e.target.value)}
+                      placeholder="ej: 12345ABCDE@AdobeOrg"
+                      required
+                      className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Valor de la Llave Secreta (API Key / Token)</label>
+                  <textarea 
+                    value={secretValue}
+                    onChange={(e) => setSecretValue(e.target.value)}
+                    placeholder="Pega aquí la clave secreta obtenida del proveedor analítico..."
+                    required
+                    rows={4}
+                    className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
+                  />
+                </div>
+              )}
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
                 <button 

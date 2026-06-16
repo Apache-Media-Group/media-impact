@@ -74,53 +74,168 @@ interface FilterBarProps {
   state: AnalyticsState;
   updateState: (updates: Partial<AnalyticsState>) => void;
   onApply: () => void;
+  connections?: Array<{ connection_id: string; display_name: string; platform: string }>;
+  accounts?: Array<{ account_id: string; display_name: string }>;
+  properties?: Array<{ property_id: string; display_name: string }>;
+  segments?: Array<{ id: string; name: string }>;
+  onConnectionChange?: (connectionId: string) => void;
+  onAccountChange?: (accountId: string) => void;
 }
 
-export const FilterBar: React.FC<FilterBarProps> = ({ state, updateState, onApply }) => (
-  <div className="bg-white border-b border-dashboard-border px-8 py-3 flex items-center gap-4 overflow-x-auto whitespace-nowrap custom-scrollbar">
-    <div className="flex items-center gap-2">
-      <Calendar className="w-4 h-4 text-mid" />
-      <span className="text-[11px] font-bold text-mid uppercase tracking-widest">Desde</span>
-      <input 
-        type="date" 
-        value={state.from} 
-        onChange={e => updateState({ from: e.target.value })}
-        className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
-      />
-      <span className="text-[11px] font-bold text-mid uppercase tracking-widest">hasta</span>
-      <input 
-        type="date" 
-        value={state.to} 
-        onChange={e => updateState({ to: e.target.value })}
-        className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
-      />
-    </div>
-    
-    <div className="h-4 w-[1px] bg-dashboard-border"></div>
-    
-    <div className="flex items-center gap-2">
-      <MapPin className="w-4 h-4 text-mid" />
-      <span className="text-[11px] font-bold text-mid uppercase tracking-widest">Mercado</span>
-      <select 
-        value={state.market}
-        onChange={e => updateState({ market: e.target.value })}
-        className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
+export const FilterBar: React.FC<FilterBarProps> = ({ 
+  state, 
+  updateState, 
+  onApply,
+  connections = [],
+  accounts = [],
+  properties = [],
+  segments = [],
+  onConnectionChange,
+  onAccountChange
+}) => {
+  const isAdobe = state.connection_id?.toLowerCase().includes('adobe');
+
+  return (
+    <div className="bg-white border-b border-dashboard-border px-8 py-3 flex items-center gap-4 overflow-x-auto whitespace-nowrap custom-scrollbar">
+      <div className="flex items-center gap-2">
+        <Calendar className="w-4 h-4 text-mid" />
+        <span className="text-[11px] font-bold text-mid uppercase tracking-widest">Desde</span>
+        <input 
+          type="date" 
+          value={state.from} 
+          onChange={e => updateState({ from: e.target.value })}
+          className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
+        />
+        <span className="text-[11px] font-bold text-mid uppercase tracking-widest">hasta</span>
+        <input 
+          type="date" 
+          value={state.to} 
+          onChange={e => updateState({ to: e.target.value })}
+          className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
+        />
+      </div>
+      
+      <div className="h-4 w-[1px] bg-dashboard-border"></div>
+
+      {/* Orígenes / Conexiones */}
+      {connections.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-mid uppercase tracking-widest">Origen</span>
+            <select 
+              value={state.connection_id}
+              onChange={e => onConnectionChange?.(e.target.value)}
+              className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 max-w-[150px] overflow-hidden text-ellipsis"
+            >
+              <option value="">Seleccionar Origen...</option>
+              {connections.map(c => (
+                <option key={c.connection_id} value={c.connection_id}>
+                  {c.display_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="h-4 w-[1px] bg-dashboard-border"></div>
+        </>
+      )}
+
+      {/* Cuentas / Compañías */}
+      {accounts.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-mid uppercase tracking-widest">
+              {isAdobe ? 'Compañía' : 'Cuenta'}
+            </span>
+            <select 
+              value={state.account_id || ''}
+              onChange={e => onAccountChange?.(e.target.value)}
+              className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 max-w-[180px] overflow-hidden text-ellipsis font-bold"
+            >
+              <option value="">
+                {isAdobe ? 'Seleccionar Compañía...' : 'Seleccionar Cuenta...'}
+              </option>
+              {accounts.map(a => (
+                <option key={a.account_id} value={a.account_id}>
+                  {a.display_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="h-4 w-[1px] bg-dashboard-border"></div>
+        </>
+      )}
+
+      {/* Propiedades / Suites */}
+      {properties.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-mid uppercase tracking-widest">
+              {isAdobe ? 'Report Suite' : 'Propiedad'}
+            </span>
+            <select 
+              value={state.property_id || ''}
+              onChange={e => updateState({ property_id: e.target.value })}
+              className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 max-w-[200px] overflow-hidden text-ellipsis font-bold text-red"
+            >
+              <option value="">
+                {isAdobe ? 'Seleccionar Report Suite...' : 'Seleccionar Propiedad...'}
+              </option>
+              {properties.map(p => (
+                <option key={p.property_id} value={p.property_id}>
+                  {p.display_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="h-4 w-[1px] bg-dashboard-border"></div>
+        </>
+      )}
+
+      {/* Segmentos de Adobe Analytics */}
+      {isAdobe && segments.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-mid uppercase tracking-widest text-[#F54963]">Segmento</span>
+            <select 
+              value={state.segment_id || ''}
+              onChange={e => updateState({ segment_id: e.target.value })}
+              className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 max-w-[180px] overflow-hidden text-ellipsis font-bold"
+            >
+              <option value="">Todos los usuarios</option>
+              {segments.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="h-4 w-[1px] bg-dashboard-border"></div>
+        </>
+      )}
+      
+      <div className="flex items-center gap-2">
+        <MapPin className="w-4 h-4 text-mid" />
+        <span className="text-[11px] font-bold text-mid uppercase tracking-widest">Mercado</span>
+        <select 
+          value={state.market}
+          onChange={e => updateState({ market: e.target.value })}
+          className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
+        >
+          <option value="all">Todos los mercados</option>
+          <option value="es">España</option>
+          <option value="mx">México</option>
+          <option value="co">Colombia</option>
+        </select>
+      </div>
+      
+      <div className="h-4 w-[1px] bg-dashboard-border"></div>
+      
+      <button 
+        onClick={onApply}
+        className="bg-red/10 text-red px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red hover:text-white transition-all flex items-center gap-1 shrink-0"
       >
-        <option value="all">Todos los mercados</option>
-        <option value="es">España</option>
-        <option value="mx">México</option>
-        <option value="co">Colombia</option>
-        {/* ... other markets */}
-      </select>
+        <Filter className="w-3 h-3" /> Aplicar Filtros
+      </button>
     </div>
-    
-    <div className="h-4 w-[1px] bg-dashboard-border"></div>
-    
-    <button 
-      onClick={onApply}
-      className="bg-red/10 text-red px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-red hover:text-white transition-all flex items-center gap-1"
-    >
-      <Filter className="w-3 h-3" /> Aplicar Filtros
-    </button>
-  </div>
-);
+  );
+};
