@@ -5,12 +5,24 @@ const API_BASE_URL = window.location.hostname === 'localhost' || window.location
   ? 'http://localhost:8080' 
   : '';
 
+const getInitialDates = () => {
+  const today = new Date();
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(today.getDate() - 90);
+  return {
+    from: ninetyDaysAgo.toISOString().split('T')[0],
+    to: today.toISOString().split('T')[0]
+  };
+};
+
+const dates = getInitialDates();
+
 export const useAnalytics = () => {
   const [state, setState] = useState<AnalyticsState>({
     market: 'all',
-    days: 30,
-    from: '2025-04-01',
-    to: '2025-04-30',
+    days: 90,
+    from: dates.from,
+    to: dates.to,
     connection_id: '',
     property_id: '',
     account_id: '',

@@ -1189,6 +1189,79 @@ async def save_tenant_secret_admin(
         logger.error(f"Error al guardar secreto de tenant en admin: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+class AdobeValidationRequest(BaseModel):
+    client_id: str
+    client_secret: str
+    org_id: str
+
+@router.post("/admin/tenants/validate-adobe-credentials", response_model=Dict[str, Any])
+async def validate_adobe_credentials_admin(
+    req: AdobeValidationRequest,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Valida las credenciales ingresadas de Adobe Analytics conectando con el Discovery API
+    y retorna la lista de Compañías y Report Suites disponibles para su selección.
+    """
+    try:
+        from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
+        
+        # Instanciar el servicio con credenciales dinámicas temporales
+        service = AdobeAnalyticsService(credentials={
+            "client_id": req.client_id,
+            "client_secret": req.client_secret,
+            "org_id": req.org_id
+        })
+        
+        # 1. Recuperar cuentas/compañías
+        accounts = await service.list_accounts()
+        companies_list = [{"id": acc.account_id, "name": acc.display_name} for acc in accounts]
+        
+        # 2. Recuperar propiedades/report suites de la primera compañía por defecto
+        suites_list = []
+        if companies_list:
+            first_company_id = companies_list[0]["id"]
+            properties = await service.list_properties(account_id=first_company_id)
+            suites_list = [{"id": prop.property_id, "name": prop.display_name} for prop in properties]
+            
+        return {
+            "status": "success",
+            "companies": companies_list,
+            "suites": suites_list
+        }
+    except Exception as e:
+        logger.error(f"Error al validar credenciales de Adobe en admin: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/admin/tenants/validate-adobe-properties", response_model=Dict[str, Any])
+async def validate_adobe_properties_admin(
+    client_id: str,
+    client_secret: str,
+    org_id: str,
+    company_id: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Retorna la lista de Report Suites disponibles para una compañía específica de Adobe.
+    """
+    try:
+        from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
+        service = AdobeAnalyticsService(credentials={
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "org_id": org_id,
+            "company_id": company_id
+        })
+        properties = await service.list_properties(account_id=company_id)
+        suites_list = [{"id": prop.property_id, "name": prop.display_name} for prop in properties]
+        return {
+            "status": "success",
+            "suites": suites_list
+        }
+    except Exception as e:
+        logger.error(f"Error al listar propiedades de Adobe en validación: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
 @router.post("/admin/tenants/{tenant_id}/redeploy-etl", response_model=Dict[str, Any])
 async def redeploy_tenant_etl_admin(
     tenant_id: str,

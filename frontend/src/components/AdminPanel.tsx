@@ -44,6 +44,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
   const [adobeClientId, setAdobeClientId] = useState('');
   const [adobeClientSecret, setAdobeClientSecret] = useState('');
   const [adobeOrgId, setAdobeOrgId] = useState('');
+  const [adobeCompaniesList, setAdobeCompaniesList] = useState<any[]>([]);
+  const [adobeSuitesList, setAdobeSuitesList] = useState<any[]>([]);
+  const [validatingAdobe, setValidatingAdobe] = useState(false);
+  const [selectedAdobeCompany, setSelectedAdobeCompany] = useState('');
+  const [selectedAdobeSuite, setSelectedAdobeSuite] = useState('');
 
   const [showSecretModal, setShowSecretModal] = useState(false);
   const [redeploying, setRedeploying] = useState(false);
@@ -260,7 +265,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
       ? JSON.stringify({
           client_id: adobeClientId.trim(),
           client_secret: adobeClientSecret.trim(),
-          org_id: adobeOrgId.trim()
+          org_id: adobeOrgId.trim(),
+          company_id: selectedAdobeCompany || undefined,
+          property_id: selectedAdobeSuite || undefined
         })
       : secretValue;
 
@@ -318,8 +325,82 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
     setAdobeClientId('');
     setAdobeClientSecret('');
     setAdobeOrgId('');
+    setAdobeCompaniesList([]);
+    setAdobeSuitesList([]);
+    setSelectedAdobeCompany('');
+    setSelectedAdobeSuite('');
     setRedeploying(false);
     setShowSecretModal(true);
+  };
+
+  const handleValidateAdobeCredentials = async () => {
+    if (!adobeClientId || !adobeClientSecret || !adobeOrgId) {
+      alert("Por favor completa los tres campos de Adobe para validar.");
+      return;
+    }
+    
+    try {
+      setValidatingAdobe(true);
+      setMessage(null);
+      
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-adobe-credentials`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: adobeClientId.trim(),
+          client_secret: adobeClientSecret.trim(),
+          org_id: adobeOrgId.trim()
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAdobeCompaniesList(data.companies || []);
+        setAdobeSuitesList(data.suites || []);
+        
+        if (data.companies && data.companies.length > 0) {
+          setSelectedAdobeCompany(data.companies[0].id);
+        }
+        if (data.suites && data.suites.length > 0) {
+          setSelectedAdobeSuite(data.suites[0].id);
+        }
+        
+        setMessage({
+          type: 'success',
+          text: `Credenciales de Adobe validadas con éxito. Se encontraron ${data.companies?.length || 0} compañías y ${data.suites?.length || 0} report suites.`
+        });
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || "Fallo en la autenticación con Adobe Discovery API.");
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Error al conectar con el servicio de validación de Adobe' });
+    } finally {
+      setValidatingAdobe(false);
+    }
+  };
+
+  const handleAdobeCompanyChange = async (companyId: string) => {
+    setSelectedAdobeCompany(companyId);
+    setSelectedAdobeSuite('');
+    setAdobeSuitesList([]);
+    
+    try {
+      setValidatingAdobe(true);
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-adobe-properties?client_id=${encodeURIComponent(adobeClientId.trim())}&client_secret=${encodeURIComponent(adobeClientSecret.trim())}&org_id=${encodeURIComponent(adobeOrgId.trim())}&company_id=${encodeURIComponent(companyId)}`);
+      
+      if (res.ok) {
+        const data = await res.json();
+        setAdobeSuitesList(data.suites || []);
+        if (data.suites && data.suites.length > 0) {
+          setSelectedAdobeSuite(data.suites[0].id);
+        }
+      }
+    } catch (err: any) {
+      console.error("Error loading suites for company:", err);
+    } finally {
+      setValidatingAdobe(false);
+    }
   };
 
   const handleRedeployEtl = async () => {
@@ -742,7 +823,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                             </span>
                           </td>
                           <td className="p-4 text-center font-bold text-white text-sm">{h.records_processed ?? 0}</td>
-                          <td className="p-4 text-mid text-[11px] font-medium max-w-[200px] truncate">
+                          <td className="p-4 text-mid text-[11px] font-mono break-all max-w-[400px]">
                             {JSON.stringify(h.results_summary)}
                           </td>
                         </tr>
@@ -974,6 +1055,52 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                       className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red"
                     />
                   </div>
+                  
+                  {/* Botón para validar en caliente */}
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleValidateAdobeCredentials}
+                      disabled={validatingAdobe || !adobeClientId || !adobeClientSecret || !adobeOrgId}
+                      className="px-4 py-2 bg-gradient-to-r from-red to-[#b91c1c] text-white hover:from-[#b91c1c] hover:to-[#991b1b] rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${validatingAdobe ? 'animate-spin' : ''}`} />
+                      {validatingAdobe ? 'Validando...' : '🔍 Validar y Cargar Compañías de Adobe'}
+                    </button>
+                  </div>
+                  
+                  {/* Selectores de Compañías y Report Suites de Adobe */}
+                  {adobeCompaniesList.length > 0 && (
+                    <div className="space-y-4 pt-3 border-t border-white/5">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-teal">Compañía Seleccionada</label>
+                        <select 
+                          value={selectedAdobeCompany}
+                          onChange={(e) => handleAdobeCompanyChange(e.target.value)}
+                          className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold"
+                        >
+                          {adobeCompaniesList.map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {adobeSuitesList.length > 0 && (
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-red">Report Suite (Propiedad para ETL)</label>
+                          <select 
+                            value={selectedAdobeSuite}
+                            onChange={(e) => setSelectedAdobeSuite(e.target.value)}
+                            className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold"
+                          >
+                            {adobeSuitesList.map(s => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div>
