@@ -1145,11 +1145,16 @@ async def run_historical_backfill_task(tenant_id: str):
         date_from = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
         date_to = datetime.utcnow().strftime("%Y-%m-%d")
         
+        # Callback para barra de progreso en tiempo real tipo tqdm
+        def on_progress_callback(step: str, message: str):
+            update_deployment_status(tenant_id, "deploying", step, message)
+            
         etl = MCPETLService(tenant_id=tenant_id)
         await etl.run_full_sync(
             credentials=credentials,
             date_from=date_from,
-            date_to=date_to
+            date_to=date_to,
+            on_progress=on_progress_callback
         )
         logger.info(f"🏁 Backfill Histórico completado con éxito para '{tenant_id}'.")
         update_deployment_status(tenant_id, "success", "Despliegue Completado con Éxito", "La infraestructura y el histórico de 90 días de Adobe/GA4 se cargaron perfectamente en BigQuery.")

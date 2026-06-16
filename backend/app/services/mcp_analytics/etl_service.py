@@ -3,7 +3,7 @@
 import os
 import logging
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Callable
 from datetime import datetime, timedelta
 
 from app.services.mcp_analytics.bigquery_service import BigQueryService
@@ -110,7 +110,7 @@ class MCPETLService:
                 
         return val
 
-    async def run_full_sync(self, credentials: Dict[str, Any], date_from: str, date_to: str) -> Dict[str, Any]:
+    async def run_full_sync(self, credentials: Dict[str, Any], date_from: str, date_to: str, on_progress: Optional[Callable[[str, str], Any]] = None) -> Dict[str, Any]:
         """
         Ejecuta un ciclo completo de sincronización de datos para el tenant de origen a fin
         de poblar las tablas analíticas en BigQuery.
@@ -137,6 +137,8 @@ class MCPETLService:
         # GA4 Sincronización
         ga4_creds_raw = credentials.get("ga4-creds")
         if ga4_creds_raw:
+            if on_progress:
+                on_progress("Ejecutando Ingesta (Google Analytics 4)", "Descargando e insertando tráfico general de GA4 directamente en BigQuery...")
             try:
                 parsed_creds = self._parse_credentials("ga4-creds", ga4_creds_raw)
                 ga_service = GAService(credentials=parsed_creds)
@@ -197,12 +199,19 @@ class MCPETLService:
                 if segments:
                     segment_loops.extend([{"id": s["id"], "name": s["name"]} for s in segments])
                 
-                logger.info(f"Iniciando ingesta analítica segmentada para {len(segment_loops)} variantes...")
+                total_segments = len(segment_loops)
+                logger.info(f"Iniciando ingesta analítica segmentada para {total_segments} variantes...")
                 
                 actual_rows = []
-                for seg in segment_loops:
+                for idx, seg in enumerate(segment_loops):
                     seg_id = seg["id"]
-                    logger.info(f"Ejecutando ETL Adobe para segmento: '{seg['name']}' ({seg_id})...")
+                    seg_name = seg["name"]
+                    
+                    progress_msg = f"Segmento {idx + 1} de {total_segments}: \"{seg_name}\""
+                    logger.info(f"Ejecutando ETL Adobe para {progress_msg} ({seg_id})...")
+                    
+                    if on_progress:
+                        on_progress("Ejecutando Ingesta (Adobe Analytics)", f"Descargando e insertando {progress_msg}...")
 
                     # Espacio de respiro proactivo (1.5 segundos) entre peticiones de segmentos
                     await asyncio.sleep(1.5)
@@ -268,6 +277,8 @@ class MCPETLService:
         # ==========================================
         peec_creds_raw = credentials.get("peec-key")
         if peec_creds_raw:
+            if on_progress:
+                on_progress("Ejecutando Ingesta (Peec.ai)", "Descargando e insertando tráfico referido e inferido de IA directamente en BigQuery...")
             try:
                 parsed_creds = self._parse_credentials("peec-key", peec_creds_raw)
                 peec_service = PeecService(credentials=parsed_creds)
@@ -310,8 +321,12 @@ class MCPETLService:
         brandlight_creds_raw = credentials.get("brandlight-key")
         visibility_rows = []
         if brandlight_creds_raw:
+            if on_progress:
+                on_progress("Ejecutando Ingesta (Brandlight BI)", "Iniciando pausa de respiro preventivo de 30s para evitar Rate-Limits en Brandlight...")
             # Pausa de respiro de 30 segundos antes de comenzar Brandlight BI
             await asyncio.sleep(30.0)
+            if on_progress:
+                on_progress("Ejecutando Ingesta (Brandlight BI)", "Descargando e insertando datos de visibilidad y Share of Voice en LLMs...")
             try:
                 parsed_creds = self._parse_credentials("brandlight-key", brandlight_creds_raw)
                 if isinstance(parsed_creds, dict):
