@@ -1578,12 +1578,15 @@ async def list_etl_alerts_admin(user_email: str = Depends(get_current_admin)):
             return []
             
         alerts_ref = tm.db.collection("etl_alerts")
-        # Filtrar únicamente alertas activas
-        docs = alerts_ref.where("status", "==", "active").order_by("timestamp", direction="DESCENDING").stream()
+        # Filtrar únicamente alertas activas (y ordenar localmente para evitar requerir índices compuestos en Firestore)
+        docs = alerts_ref.where("status", "==", "active").stream()
         alerts = []
         for doc in docs:
             alerts.append(doc.to_dict())
-            
+
+        # Ordenar localmente por fecha descendente
+        alerts.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+
         return alerts
     except Exception as e:
         logger.error(f"Error al listar alertas de ETL: {e}")
