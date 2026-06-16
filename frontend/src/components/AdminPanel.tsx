@@ -46,6 +46,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
   const [adobeOrgId, setAdobeOrgId] = useState('');
 
   const [showSecretModal, setShowSecretModal] = useState(false);
+  const [redeploying, setRedeploying] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [adminEmail] = useState(localStorage.getItem('admin_user_email') || 'consultor@llyc.global');
 
@@ -317,7 +318,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
     setAdobeClientId('');
     setAdobeClientSecret('');
     setAdobeOrgId('');
+    setRedeploying(false);
     setShowSecretModal(true);
+  };
+
+  const handleRedeployEtl = async () => {
+    if (!secretTenantId) return;
+    
+    try {
+      setRedeploying(true);
+      setMessage(null);
+      
+      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${secretTenantId}/redeploy-etl`, {
+        method: 'POST'
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setMessage({
+          type: 'success',
+          text: data.message || 'Infraestructura ETL re-desplegada con éxito. Se re-creó el Cloud Scheduler y se encoló el backfill histórico.'
+        });
+      } else {
+        throw new Error("Error al re-desplegar la infraestructura ETL");
+      }
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Error al re-desplegar la ETL' });
+    } finally {
+      setRedeploying(false);
+    }
   };
 
   return (
@@ -921,6 +950,28 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                   />
                 </div>
               )}
+
+              {/* Sección de Automatización ETL y Scheduler (Para re-desplegar si falló) */}
+              <div className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3 mt-4">
+                <div className="flex items-start gap-2.5">
+                  <RefreshCw className={`w-4 h-4 text-amber-400 mt-0.5 ${redeploying ? 'animate-spin' : ''}`} />
+                  <div>
+                    <h4 className="text-[10px] font-bold uppercase tracking-widest text-white">Estado de Automatización (Daily ETL & Backfill)</h4>
+                    <p className="text-[9px] text-mid leading-relaxed mt-1">
+                      Si el Cloud Scheduler diario o el backfill de 90 días no se configuraron debido a un fallo inicial, puedes forzar su re-despliegue manual e inmediato.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRedeployEtl}
+                  disabled={redeploying || saving}
+                  className="w-full py-2 bg-gradient-to-r from-amber-500/10 to-amber-600/10 hover:from-amber-500/20 hover:to-amber-600/20 text-amber-400 hover:text-white border border-amber-500/20 disabled:opacity-50 text-[10px] font-black uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3 h-3 ${redeploying ? 'animate-spin' : ''}`} />
+                  {redeploying ? 'Re-desplegando...' : 'Forzar Re-despliegue de Scheduler & Backfill'}
+                </button>
+              </div>
 
               <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
                 <button 

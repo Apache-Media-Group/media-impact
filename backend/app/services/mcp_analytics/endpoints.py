@@ -1169,6 +1169,33 @@ async def save_tenant_secret_admin(
         logger.error(f"Error al guardar secreto de tenant en admin: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/admin/tenants/{tenant_id}/redeploy-etl", response_model=Dict[str, Any])
+async def redeploy_tenant_etl_admin(
+    tenant_id: str,
+    background_tasks: BackgroundTasks,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Fuerza el re-despliegue de la infraestructura ETL de un cliente (Solo Superadmin LLYC).
+    Esto re-crea el job en Cloud Scheduler y encola un nuevo Backfill histórico de 90 días en segundo plano.
+    """
+    try:
+        tenant_id_clean = tenant_id.lower().strip()
+        
+        # 1. Re-crear Cloud Scheduler
+        create_or_update_tenant_scheduler(tenant_id_clean)
+        
+        # 2. Re-lanzar backfill histórico asíncrono
+        background_tasks.add_task(run_historical_backfill_task, tenant_id_clean)
+        
+        return {
+            "status": "success",
+            "message": f"Se re-desplegó con éxito el Scheduler y se encoló un nuevo Backfill de 90 días en segundo plano para '{tenant_id_clean}'."
+        }
+    except Exception as e:
+        logger.error(f"Error al re-desplegar ETL para {tenant_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/admin/tenants/{tenant_id}/logo", response_model=Dict[str, Any])
 async def upload_tenant_logo_admin(
     tenant_id: str,
