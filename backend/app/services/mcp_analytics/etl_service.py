@@ -147,8 +147,9 @@ class MCPETLService:
                     metrics=["activeUsers", "sessions", "conversions"]
                 )
                 res = await ga_service.run_report(req)
+                ga4_rows = []
                 for r in res.rows:
-                    traffic_rows.append({
+                    ga4_rows.append({
                         "tenant_id": self.tenant_id,
                         "date": r.get("date"),
                         "source": r.get("source"),
@@ -158,8 +159,14 @@ class MCPETLService:
                         "ai_inferred_sessions": 0,
                         "engagement_score": float(r.get("conversions", 0)),
                         "company_id": "ga4-account",
-                        "property_id": "properties/default"
+                        "property_id": "properties/default",
+                        "segment_id": "all-users"
                     })
+                if ga4_rows:
+                    logger.info(f"📤 [ETL ESCALONADA] Cargando {len(ga4_rows)} filas de GA4 directamente en BigQuery...")
+                    self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to, segment_id="all-users")
+                    self.bq_service.insert_rows("fact_traffic_evolution", ga4_rows)
+                    traffic_rows.extend(ga4_rows)
                 results["ga4"] = f"success ({len(res.rows)} filas)"
             except Exception as e:
                 logger.error(f"Error en extracción de GA4: {e}")
@@ -211,6 +218,7 @@ class MCPETLService:
                     
                     try:
                         res = await adobe_service.run_report(req)
+                        segment_rows = []
                         for r in res.rows:
                             raw_date = r.get("date")
                             if raw_date:
@@ -222,7 +230,7 @@ class MCPETLService:
                             else:
                                 date_str = datetime.utcnow().strftime("%Y-%m-%d")
                                 
-                            actual_rows.append({
+                            segment_rows.append({
                                 "tenant_id": self.tenant_id,
                                 "date": date_str,
                                 "source": "adobe-analytics",
@@ -235,13 +243,21 @@ class MCPETLService:
                                 "property_id": chosen_property,
                                 "segment_id": seg_id
                             })
+                            
+                        if segment_rows:
+                            logger.info(f"📤 [ETL ESCALONADA] Cargando progresivamente {len(segment_rows)} filas para segmento '{seg['name']}' ({seg_id}) en BigQuery...")
+                            # 📥 Borrar duplicados únicamente para este segmento específico antes de insertar
+                            self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to, segment_id=seg_id)
+                            # 📥 Insertar las nuevas filas en BigQuery de inmediato
+                            self.bq_service.insert_rows("fact_traffic_evolution", segment_rows)
+                            traffic_rows.extend(segment_rows)
+                            
                     except Exception as ere:
-                        logger.error(f"Error extrayendo datos de Adobe para el segmento '{seg['name']}': {ere}")
+                        logger.error(f"Error extrayendo/guardando datos de Adobe para el segmento '{seg['name']}': {ere}")
                         # Continuar con el siguiente segmento para no detener toda la ETL de los demás segmentos
                         continue
                     
-                traffic_rows.extend(actual_rows)
-                results["adobe"] = f"success ({len(actual_rows)} filas reales importadas para {len(segment_loops)} segmentos)"
+                results["adobe"] = f"success ({len(traffic_rows)} filas reales importadas para {len(segment_loops)} segmentos)"
             except Exception as e:
                 logger.error(f"Error en extracción de Adobe: {e}")
                 results["adobe"] = f"error: {str(e)}"
@@ -263,9 +279,9 @@ class MCPETLService:
                 )
                 res = await peec_service.run_report(req)
                 
-                # Integrar métricas de Peec en el tráfico unificado
+                peec_rows = []
                 for r in res.rows:
-                    traffic_rows.append({
+                    peec_rows.append({
                         "tenant_id": self.tenant_id,
                         "date": r.get("date"),
                         "source": "ai-engines",
@@ -275,8 +291,14 @@ class MCPETLService:
                         "ai_inferred_sessions": int(float(r.get("ai_inferred", 0))),
                         "engagement_score": float(r.get("sentiment_score", 0)),
                         "company_id": "peec-account",
-                        "property_id": "properties/peec-default"
+                        "property_id": "properties/peec-default",
+                        "segment_id": "all-users"
                     })
+                if peec_rows:
+                    logger.info(f"📤 [ETL ESCALONADA] Cargando {len(peec_rows)} filas de Peec.ai directamente en BigQuery...")
+                    self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to, segment_id="all-users")
+                    self.bq_service.insert_rows("fact_traffic_evolution", peec_rows)
+                    traffic_rows.extend(peec_rows)
                 results["peec"] = f"success ({len(res.rows)} filas)"
             except Exception as e:
                 logger.error(f"Error en extracción de Peec.ai: {e}")
@@ -314,41 +336,31 @@ class MCPETLService:
                         "company_id": "brandlight-company",
                         "property_id": "properties/ES"
                     })
+                if visibility_rows:
+                    logger.info(f"📤 [ETL ESCALONADA] Cargando {len(visibility_rows)} filas de Brandlight directamente en BigQuery...")
+                    self.bq_service.delete_existing_records("fact_ai_visibility", self.tenant_id, date_from, date_to)
+                    self.bq_service.insert_rows("fact_ai_visibility", visibility_rows)
+                    
                 results["brandlight"] = f"success ({len(res.rows)} filas)"
             except Exception as e:
                 logger.error(f"Error en extracción de Brandlight: {e}")
                 results["brandlight"] = f"error: {str(e)}"
 
         # ==========================================
-        # 📥 LOAD: Carga masiva e Idempotente en BigQuery
+        # 📊 SUMMARY: Consolidación final del ciclo de ETL
         # ==========================================
-        load_success = True
-        total_records = 0
+        # El proceso es progresivo y escalonado; las filas ya han sido insertadas con seguridad
+        # Calculamos el estado de éxito total o parcial dinámicamente en base a los resultados
+        has_errors = any("error" in str(val).lower() for val in results.values())
+        has_success = any("success" in str(val).lower() for val in results.values())
         
-        if traffic_rows:
-            # 1. Limpiar duplicados preexistentes en el rango de fechas para este tenant antes de insertar
-            self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to)
-            # 2. Insertar los nuevos datos limpios
-            success = self.bq_service.insert_rows("fact_traffic_evolution", traffic_rows)
-            if success:
-                total_records += len(traffic_rows)
-            else:
-                load_success = False
-
-        if visibility_rows:
-            # 1. Limpiar duplicados preexistentes en el rango de fechas para este tenant antes de insertar
-            self.bq_service.delete_existing_records("fact_ai_visibility", self.tenant_id, date_from, date_to)
-            # 2. Insertar los nuevos datos limpios
-            success = self.bq_service.insert_rows("fact_ai_visibility", visibility_rows)
-            if success:
-                total_records += len(visibility_rows)
-            else:
-                load_success = False
-
-        logger.info(f"🏁 Ciclo de ETL completado para '{self.tenant_id}'. Estado de carga: {load_success}")
+        load_success = not has_errors if has_success else False
+        total_records = len(traffic_rows) + len(visibility_rows)
+        
+        logger.info(f"🏁 Ciclo de ETL completado para '{self.tenant_id}'. Estado de carga final: {'ÉXITO' if load_success else 'PARCIAL/ERROR'}")
         
         status_str = "success" if load_success else "partial_success"
-        if not load_success and total_records == 0:
+        if has_errors and not has_success:
             status_str = "error"
 
         sync_result = {

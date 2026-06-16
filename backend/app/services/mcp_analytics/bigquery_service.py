@@ -151,31 +151,35 @@ class BigQueryService:
             logger.error(f"Excepción al insertar filas en BigQuery ({table_name}): {e}")
             return False
 
-    def delete_existing_records(self, table_name: str, tenant_id: str, start_date: str, end_date: str) -> bool:
+    def delete_existing_records(self, table_name: str, tenant_id: str, start_date: str, end_date: str, segment_id: Optional[str] = None) -> bool:
         """
         Elimina registros preexistentes en el rango de fechas antes de una nueva inserción.
-        Garantiza que el proceso de ETL sea IDEMPOTENTE (sin duplicados).
+        Garantiza que el proceso de ETL sea IDEMPOTENTE (sin duplicados), filtrando por segmento si se especifica.
         """
         if not self.client:
             logger.warning("BigQuery Client no disponible. Saltando limpieza de duplicados.")
             return False
 
         try:
+            segment_filter = "AND segment_id = @segment_id" if segment_id else ""
             query = f"""
                 DELETE FROM `{self.project_id}.{self.dataset_id}.{table_name}`
                 WHERE tenant_id = @tenant_id 
                   AND date BETWEEN @start_date AND @end_date
+                  {segment_filter}
             """
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("tenant_id", "STRING", tenant_id),
-                    bigquery.ScalarQueryParameter("start_date", "STRING", start_date),
-                    bigquery.ScalarQueryParameter("end_date", "STRING", end_date),
-                ]
-            )
+            params = [
+                bigquery.ScalarQueryParameter("tenant_id", "STRING", tenant_id),
+                bigquery.ScalarQueryParameter("start_date", "STRING", start_date),
+                bigquery.ScalarQueryParameter("end_date", "STRING", end_date),
+            ]
+            if segment_id:
+                params.append(bigquery.ScalarQueryParameter("segment_id", "STRING", segment_id))
+                
+            job_config = bigquery.QueryJobConfig(query_parameters=params)
             query_job = self.client.query(query, job_config=job_config)
             query_job.result()  # Esperar que termine la eliminación
-            logger.info(f"🧹 Limpieza de duplicados exitosa en '{table_name}' para {tenant_id} ({start_date} a {end_date}).")
+            logger.info(f"🧹 Limpieza de duplicados exitosa en '{table_name}' para {tenant_id} ({start_date} a {end_date}, Segmento: {segment_id or 'todos'}).")
             return True
         except Exception as e:
             logger.error(f"Error al eliminar registros preexistentes en BigQuery ({table_name}): {e}")
