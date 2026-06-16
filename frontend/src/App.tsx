@@ -22,6 +22,12 @@ interface TenantConfig {
   font_family: string;
   support_email: string;
   updated_at?: string;
+  configured_secrets?: {
+    'brandlight-key'?: boolean;
+    'peec-key'?: boolean;
+    'ga4-creds'?: boolean;
+    'adobe-creds'?: boolean;
+  };
 }
 
 const App: React.FC = () => {

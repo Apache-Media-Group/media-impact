@@ -12,6 +12,12 @@ interface TenantConfig {
   font_family: string;
   support_email: string;
   updated_at?: string;
+  configured_secrets?: {
+    'brandlight-key'?: boolean;
+    'peec-key'?: boolean;
+    'ga4-creds'?: boolean;
+    'adobe-creds'?: boolean;
+  };
 }
 
 interface AdminPanelProps {
@@ -259,6 +265,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
         });
         setShowSecretModal(false);
         setSecretValue('');
+        fetchTenants(); // Recargar base de datos e integraciones actualizadas en tiempo real
       } else {
         throw new Error("Error al persistir el secreto en GCP Secret Manager");
       }
@@ -449,6 +456,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
                             <span className="text-[9px] font-mono text-mid uppercase">{t.secondary_color}</span>
                           </div>
                         </div>
+
+                        {/* Estado de Integraciones */}
+                        <div className="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                          <span className="text-[9px] text-mid uppercase tracking-wider font-semibold mr-1">Integraciones (GCP):</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                            (t.configured_secrets || {})['ga4-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`}>
+                            GA4
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                            (t.configured_secrets || {})['adobe-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`}>
+                            Adobe
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                            (t.configured_secrets || {})['peec-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`}>
+                            Peec.ai
+                          </span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${
+                            (t.configured_secrets || {})['brandlight-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                          }`}>
+                            Brandlight
+                          </span>
+                        </div>
                       </div>
                     </div>
 
@@ -489,6 +521,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
         ) : (
           /* TAB 2: MONITOR DE SALUD ETL (NUEVO) */
           <div className="space-y-6">
+            {/* ESTADO DE CONFIGURACIÓN DE ORÍGENES DE DATOS */}
+            <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
+              <div className="p-5 border-b border-white/10 bg-white/[0.02] flex items-center gap-2">
+                <Database className="w-5 h-5 text-teal animate-pulse" />
+                <h2 className="text-xs font-black uppercase tracking-widest text-white">Estado de Configuración de Orígenes (GCP Secret Manager)</h2>
+              </div>
+              <div className="p-5 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {tenants.map(t => {
+                  const secrets = t.configured_secrets || {};
+                  return (
+                    <div key={t.tenant_id} className="p-4 bg-white/[0.02] border border-white/5 rounded-xl flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-black text-xs uppercase tracking-wider text-white">{t.tenant_name}</h3>
+                        <span className="text-[9px] text-mid">ID: {t.tenant_id}</span>
+                      </div>
+                      <div className="flex gap-1.5 flex-wrap justify-end">
+                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                          secrets['ga4-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                        }`} title={secrets['ga4-creds'] ? 'Configurado' : 'Sin Configurar'}>
+                          GA4
+                        </span>
+                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                          secrets['adobe-creds'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                        }`} title={secrets['adobe-creds'] ? 'Configurado' : 'Sin Configurar'}>
+                          Adobe
+                        </span>
+                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                          secrets['peec-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                        }`} title={secrets['peec-key'] ? 'Configurado' : 'Sin Configurar'}>
+                          Peec
+                        </span>
+                        <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${
+                          secrets['brandlight-key'] ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-white/5 text-white/30 border border-white/5'
+                        }`} title={secrets['brandlight-key'] ? 'Configurado' : 'Sin Configurar'}>
+                          Brand
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* ALERTAS DE SALUD MAESTRAS (CON ACCIÓN DISMISS) */}
             <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
               <div className="p-5 border-b border-white/10 bg-white/[0.02] flex items-center gap-2">

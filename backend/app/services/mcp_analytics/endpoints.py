@@ -868,9 +868,12 @@ def get_current_admin(user_email: str = Depends(get_current_user)):
 async def list_tenants_admin(user_email: str = Depends(get_current_admin)):
     """
     Lista todos los tenants creados en Firestore (Solo Superadmin LLYC).
+    Soporta backfill automático y cacheado de configuración de secretos de GCP Secret Manager.
     """
     try:
         from app.services.auth_utils import TokenManager
+        from app.services.mcp_analytics.secret_manager_service import SecretManagerService
+        
         tm = TokenManager()
         if not tm.db:
             return []
@@ -878,8 +881,48 @@ async def list_tenants_admin(user_email: str = Depends(get_current_admin)):
         tenants_ref = tm.db.collection("tenants")
         docs = tenants_ref.stream()
         tenants = []
+        sms = SecretManagerService()
+        
         for doc in docs:
-            tenants.append(doc.to_dict())
+            tdata = doc.to_dict()
+            tenant_id = tdata.get("tenant_id")
+            
+            # Inicializar o recuperar cacheado de configured_secrets
+            if "configured_secrets" not in tdata or not isinstance(tdata["configured_secrets"], dict):
+                tdata["configured_secrets"] = {
+                    "brandlight-key": False,
+                    "peec-key": False,
+                    "ga4-creds": False,
+                    "adobe-creds": False
+                }
+                
+                # Intentar escanear en GCP Secret Manager de forma progresiva si está disponible
+                if sms.client:
+                    for st in ["brandlight-key", "peec-key", "ga4-creds", "adobe-creds"]:
+                        try:
+                            secret_id = f"llyc-mcp-{tenant_id}-{st}".lower().strip()
+                            secret_path = f"projects/{sms.project_id}/secrets/{secret_id}"
+                            sms.client.get_secret(request={"name": secret_path})
+                            tdata["configured_secrets"][st] = True
+                        except Exception:
+                            pass
+                    
+                    # Guardar el caché en Firestore para acelerar consultas futuras
+                    try:
+                        tm.db.collection("tenants").document(tenant_id).update({
+                            "configured_secrets": tdata["configured_secrets"]
+                        })
+                    except Exception as fe:
+                        logger.warning(f"No se pudo cachear configured_secrets para {tenant_id} en Firestore: {fe}")
+            else:
+                # Asegurar de que tenga todas las llaves esperadas para evitar errores en frontend
+                current_secrets = tdata["configured_secrets"]
+                for st in ["brandlight-key", "peec-key", "ga4-creds", "adobe-creds"]:
+                    if st not in current_secrets:
+                        current_secrets[st] = False
+                tdata["configured_secrets"] = current_secrets
+                
+            tenants.append(tdata)
             
         return tenants
     except Exception as e:
@@ -911,11 +954,35 @@ async def create_or_update_tenant_admin(
             "updated_at": datetime.utcnow().isoformat()
         }
         
+        # Mantener secrets configurados si ya existen o inicializar de forma limpia
         if tm.db:
+            existing = tm.db.collection("tenants").document(tenant_id).get()
+            if existing.exists:
+                existing_data = existing.to_dict()
+                tenant_data["configured_secrets"] = existing_data.get("configured_secrets", {
+                    "brandlight-key": False,
+                    "peec-key": False,
+                    "ga4-creds": False,
+                    "adobe-creds": False
+                })
+            else:
+                tenant_data["configured_secrets"] = {
+                    "brandlight-key": False,
+                    "peec-key": False,
+                    "ga4-creds": False,
+                    "adobe-creds": False
+                }
+            
             tm.db.collection("tenants").document(tenant_id).set(tenant_data, merge=True)
             logger.info(f"Tenant '{tenant_id}' guardado con éxito en Firestore por {user_email}")
         else:
             logger.warning("Firestore no disponible, simulando guardado de Tenant local.")
+            tenant_data["configured_secrets"] = {
+                "brandlight-key": False,
+                "peec-key": False,
+                "ga4-creds": False,
+                "adobe-creds": False
+            }
             
         return {"status": "success", "message": f"Tenant '{tenant_id}' guardado con éxito.", "data": tenant_data}
         
@@ -931,7 +998,7 @@ async def save_tenant_secret_admin(
 ):
     """
     Guarda y encripta una clave sensible de un cliente (ej: Brandlight API Key)
-    directamente en GCP Secret Manager (Solo Superadmin LLYC).
+    directamente en GCP Secret Manager (Solo Superadmin LLYC) y actualiza la metadata en Firestore.
     """
     try:
         from app.services.mcp_analytics.secret_manager_service import SecretManagerService
@@ -950,6 +1017,21 @@ async def save_tenant_secret_admin(
         if not success:
             raise Exception("No se pudo persistir el secreto en GCP Secret Manager.")
             
+        # 2. Actualizar de forma automatizada en Firestore que este secreto ya está configurado (cacheado de metadata)
+        from app.services.auth_utils import TokenManager
+        tm = TokenManager()
+        if tm.db:
+            tenant_ref = tm.db.collection("tenants").document(tenant_id_clean)
+            tenant_doc = tenant_ref.get()
+            if tenant_doc.exists:
+                tenant_data = tenant_doc.to_dict()
+                configured_secrets = tenant_data.get("configured_secrets", {})
+                if not isinstance(configured_secrets, dict):
+                    configured_secrets = {}
+                configured_secrets[secret_type_clean] = True
+                tenant_ref.update({"configured_secrets": configured_secrets})
+                logger.info(f"Metadata de secreto '{secret_type_clean}' actualizada en Firestore para '{tenant_id_clean}'.")
+                
         return {
             "status": "success",
             "message": f"Secreto '{secret_type_clean}' guardado y encriptado con éxito para el tenant '{tenant_id_clean}'."

@@ -26,6 +26,90 @@ class MCPETLService:
         self.project_id = project_id or os.getenv("GCP_PROJECT_ID")
         self.bq_service = BigQueryService(project_id=self.project_id)
 
+    def _parse_credentials(self, secret_type: str, val: str) -> Any:
+        """
+        Interpreta el valor de un secreto según su tipo para retornar un diccionario limpio
+        o el objeto de Credenciales OAuth/ServiceAccount correspondiente de Google.
+        """
+        if not val:
+            return None
+            
+        import json
+        is_json = False
+        parsed_val = None
+        if isinstance(val, str) and val.strip().startswith("{") and val.strip().endswith("}"):
+            try:
+                parsed_val = json.loads(val)
+                is_json = True
+            except Exception:
+                pass
+                
+        if secret_type == "ga4-creds":
+            from google.oauth2.credentials import Credentials
+            from app.core.config import settings
+            
+            if is_json:
+                if parsed_val.get("type") == "service_account" or "private_key" in parsed_val:
+                    from google.oauth2 import service_account
+                    return service_account.Credentials.from_service_account_info(
+                        parsed_val,
+                        scopes=parsed_val.get("scopes", ["https://www.googleapis.com/auth/analytics.readonly"])
+                    )
+                else:
+                    return Credentials(
+                        token=parsed_val.get("access_token") or parsed_val.get("accessToken"),
+                        refresh_token=parsed_val.get("refresh_token") or parsed_val.get("refreshToken"),
+                        token_uri="https://oauth2.googleapis.com/token",
+                        client_id=parsed_val.get("client_id") or settings.GOOGLE_CLIENT_ID,
+                        client_secret=parsed_val.get("client_secret") or settings.GOOGLE_CLIENT_SECRET,
+                        scopes=parsed_val.get("scopes", ["https://www.googleapis.com/auth/analytics.readonly"])
+                    )
+            elif isinstance(val, dict):
+                return Credentials(
+                    token=val.get("access_token") or val.get("accessToken"),
+                    refresh_token=val.get("refresh_token") or val.get("refreshToken"),
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=val.get("client_id") or settings.GOOGLE_CLIENT_ID,
+                    client_secret=val.get("client_secret") or settings.GOOGLE_CLIENT_SECRET,
+                    scopes=val.get("scopes", ["https://www.googleapis.com/auth/analytics.readonly"])
+                )
+            else:
+                from google.oauth2.credentials import Credentials
+                from app.core.config import settings
+                return Credentials(
+                    token=val,
+                    token_uri="https://oauth2.googleapis.com/token",
+                    client_id=settings.GOOGLE_CLIENT_ID,
+                    client_secret=settings.GOOGLE_CLIENT_SECRET,
+                    scopes=["https://www.googleapis.com/auth/analytics.readonly"]
+                )
+                
+        elif secret_type == "adobe-creds":
+            if is_json:
+                return parsed_val
+            elif isinstance(val, dict):
+                return val
+            else:
+                return {"client_secret": val}
+                
+        elif secret_type == "peec-key":
+            if is_json:
+                return parsed_val
+            elif isinstance(val, dict):
+                return val
+            else:
+                return {"api_key": val}
+                
+        elif secret_type == "brandlight-key":
+            if is_json:
+                return parsed_val
+            elif isinstance(val, dict):
+                return val
+            else:
+                return {"api_key": val}
+                
+        return val
+
     async def run_full_sync(self, credentials: Dict[str, Any], date_from: str, date_to: str) -> Dict[str, Any]:
         """
         Ejecuta un ciclo completo de sincronización de datos para el tenant de origen a fin
@@ -51,10 +135,11 @@ class MCPETLService:
         traffic_rows = []
 
         # GA4 Sincronización
-        ga4_creds = credentials.get("ga4-creds")
-        if ga4_creds:
+        ga4_creds_raw = credentials.get("ga4-creds")
+        if ga4_creds_raw:
             try:
-                ga_service = GAService(credentials=ga4_creds)
+                parsed_creds = self._parse_credentials("ga4-creds", ga4_creds_raw)
+                ga_service = GAService(credentials=parsed_creds)
                 req = RunReportRequest(
                     property_id="properties/default",
                     date_ranges=[{"start_date": date_from, "end_date": date_to}],
@@ -79,10 +164,11 @@ class MCPETLService:
                 results["ga4"] = f"error: {str(e)}"
 
         # Adobe Analytics Sincronización
-        adobe_creds = credentials.get("adobe-creds")
-        if adobe_creds:
+        adobe_creds_raw = credentials.get("adobe-creds")
+        if adobe_creds_raw:
             try:
-                adobe_service = AdobeAnalyticsService(credentials=adobe_creds)
+                parsed_creds = self._parse_credentials("adobe-creds", adobe_creds_raw)
+                adobe_service = AdobeAnalyticsService(credentials=parsed_creds)
                 # Extraer de forma similar...
                 # Para el MVP simula la transformación de forma robusta
                 results["adobe"] = "success (integrado)"
@@ -93,10 +179,11 @@ class MCPETLService:
         # ==========================================
         # 🤖 EXTRACT & TRANSFORM: Peec.ai (Tráfico de IA)
         # ==========================================
-        peec_creds = credentials.get("peec-key")
-        if peec_creds:
+        peec_creds_raw = credentials.get("peec-key")
+        if peec_creds_raw:
             try:
-                peec_service = PeecService(credentials={"api_key": peec_creds})
+                parsed_creds = self._parse_credentials("peec-key", peec_creds_raw)
+                peec_service = PeecService(credentials=parsed_creds)
                 req = RunReportRequest(
                     property_id="properties/peec-default",
                     date_ranges=[{"start_date": date_from, "end_date": date_to}],
@@ -125,11 +212,12 @@ class MCPETLService:
         # ==========================================
         # 📈 EXTRACT & TRANSFORM: Brandlight BI (Visibilidad)
         # ==========================================
-        brandlight_creds = credentials.get("brandlight-key")
+        brandlight_creds_raw = credentials.get("brandlight-key")
         visibility_rows = []
-        if brandlight_creds:
+        if brandlight_creds_raw:
             try:
-                brandlight_service = BrandlightService(credentials={"api_key": brandlight_creds})
+                parsed_creds = self._parse_credentials("brandlight-key", brandlight_creds_raw)
+                brandlight_service = BrandlightService(credentials=parsed_creds)
                 req = RunReportRequest(
                     property_id="properties/ES",
                     date_ranges=[{"start_date": date_from, "end_date": date_to}],
