@@ -1,7 +1,7 @@
 // frontend/src/components/admin/AuditModal.tsx
 import React, { useState, useEffect } from 'react';
 import { Database, RefreshCw, CalendarRange, AlertCircle, CheckCircle2, Wrench } from 'lucide-react';
-import { API_BASE_URL } from './types';
+import { secureFetch } from '../../services/apiClient';
 
 interface AuditModalProps {
   isOpen: boolean;
@@ -21,7 +21,7 @@ export const AuditModal: React.FC<AuditModalProps> = ({
   const fetchDataGaps = async (id: string) => {
     try {
       setLoadingAudit(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${id}/data-gaps`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${id}/data-gaps`);
       if (res.ok) {
         const data = await res.json();
         setAuditData(data);
@@ -49,9 +49,8 @@ export const AuditModal: React.FC<AuditModalProps> = ({
     
     try {
       setPatching(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${tenantId}/patch`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/patch`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ gaps: auditData.gaps })
       });
       

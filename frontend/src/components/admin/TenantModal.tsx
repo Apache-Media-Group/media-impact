@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Save } from 'lucide-react';
 import type { TenantConfig } from './types';
-import { API_BASE_URL } from './types';
+import { secureFetch } from '../../services/apiClient';
 
 interface TenantModalProps {
   isOpen: boolean;
@@ -41,7 +41,7 @@ export const TenantModal: React.FC<TenantModalProps> = ({
     
     try {
       setUploadingLogo(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${editingTenant.tenant_id}/logo`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${editingTenant.tenant_id}/logo`, {
         method: 'POST',
         body: formData
       });
@@ -65,9 +65,8 @@ export const TenantModal: React.FC<TenantModalProps> = ({
 
     try {
       setSaving(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(editingTenant)
       });
 

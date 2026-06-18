@@ -1,9 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { AnalyticsState, ApiResponse } from '../types';
-
-const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-  ? 'http://localhost:8080' 
-  : '';
+import { secureFetch } from '../services/apiClient';
 
 const getInitialDates = () => {
   const today = new Date();
@@ -41,9 +38,8 @@ export const useAnalytics = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/run-report`, {
+      const response = await secureFetch('/api/v1/mcp-analytics/run-report', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           connection_id: currentState.connection_id,
           property_id: currentState.property_id,

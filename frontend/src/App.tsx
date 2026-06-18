@@ -13,6 +13,7 @@ import { AdminPanel } from './components/AdminPanel';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { Database } from 'lucide-react';
+import { secureFetch, API_BASE_URL } from './services/apiClient';
 
 interface TenantConfig {
   tenant_id: string;
@@ -128,10 +129,7 @@ const App: React.FC = () => {
 
   const handlePreviewTenant = async (tenantId: string) => {
     try {
-      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:8080' 
-        : '';
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/tenant/config?tenant=${tenantId}`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/tenant/config?tenant=${tenantId}`);
       if (res.ok) {
         const data: TenantConfig = await res.json();
         setTenant(data);
@@ -216,10 +214,7 @@ const App: React.FC = () => {
     if (!connId) return;
 
     try {
-      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:8080' 
-        : '';
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/accounts?connection_id=${connId}`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/accounts?connection_id=${connId}`);
       if (res.ok) {
         const data = await res.json();
         const loadedAccounts = data.accounts || [];
@@ -246,10 +241,7 @@ const App: React.FC = () => {
     if (!connId || !accId) return;
 
     try {
-      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:8080' 
-        : '';
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/properties?connection_id=${connId}&account_id=${accId}`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/properties?connection_id=${connId}&account_id=${accId}`);
       if (res.ok) {
         const data = await res.json();
         const loadedProperties = data.properties || [];
@@ -277,10 +269,7 @@ const App: React.FC = () => {
     if (!connId || !propId) return;
 
     try {
-      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:8080' 
-        : '';
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/adobe/segments/${propId}?connection_id=${connId}`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/adobe/segments/${propId}?connection_id=${connId}`);
       if (res.ok) {
         const data = await res.json();
         setSegments(data.segments || []);
@@ -297,14 +286,11 @@ const App: React.FC = () => {
     
     const fetchTenantConfig = async () => {
       try {
-        const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-          ? 'http://localhost:8080' 
-          : '';
         const url = tenantParam 
-          ? `${API_BASE_URL}/api/v1/mcp-analytics/tenant/config?tenant=${tenantParam}`
-          : `${API_BASE_URL}/api/v1/mcp-analytics/tenant/config`;
+          ? `/api/v1/mcp-analytics/tenant/config?tenant=${tenantParam}`
+          : `/api/v1/mcp-analytics/tenant/config`;
           
-        const res = await fetch(url);
+        const res = await secureFetch(url);
         if (res.ok) {
           const data: TenantConfig = await res.json();
           setTenant(data);
@@ -405,9 +391,6 @@ const App: React.FC = () => {
   }, [data]);
 
   const handleSelectGA4 = () => {
-    const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:8080' 
-      : '';
     window.location.href = `${API_BASE_URL}/api/v1/mcp-analytics/oauth/login`;
   };
 
@@ -424,14 +407,11 @@ const App: React.FC = () => {
   };
 
   const handleFileUpload = async (file: File) => {
-    const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-      ? 'http://localhost:8080' 
-      : '';
     const formData = new FormData();
     formData.append('file', file);
     
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/upload-data`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/upload-data`, {
         method: 'POST',
         body: formData
       });

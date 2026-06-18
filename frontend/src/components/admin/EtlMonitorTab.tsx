@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Database, AlertTriangle, Activity, RefreshCw, AlertCircle, Check, CheckCircle2 } from 'lucide-react';
 import type { TenantConfig } from './types';
-import { API_BASE_URL } from './types';
+import { secureFetch } from '../../services/apiClient';
 
 interface EtlMonitorTabProps {
   tenants: TenantConfig[];
@@ -24,12 +24,12 @@ export const EtlMonitorTab: React.FC<EtlMonitorTabProps> = ({
       setLoadingEtl(true);
       
       // 1. Fetch History
-      const resHistory = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/etl/history`);
+      const resHistory = await secureFetch(`/api/v1/mcp-analytics/admin/etl/history`);
       const dataHistory = resHistory.ok ? await resHistory.json() : [];
       setEtlHistory(dataHistory);
       
       // 2. Fetch Active Alerts
-      const resAlerts = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/etl/alerts`);
+      const resAlerts = await secureFetch(`/api/v1/mcp-analytics/admin/etl/alerts`);
       const dataAlerts = resAlerts.ok ? await resAlerts.json() : [];
       setEtlAlerts(dataAlerts);
       
@@ -42,7 +42,7 @@ export const EtlMonitorTab: React.FC<EtlMonitorTabProps> = ({
 
   const handleDismissAlert = async (alertId: string) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/etl/alerts/${alertId}/dismiss`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/etl/alerts/${alertId}/dismiss`, {
         method: 'POST'
       });
       if (res.ok) {
@@ -66,7 +66,7 @@ export const EtlMonitorTab: React.FC<EtlMonitorTabProps> = ({
         text: `Iniciando re-despliegue de ETL y backfill histórico de 90 días para el cliente '${tenantId}'...`
       });
       
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${tenantId}/redeploy-etl`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/redeploy-etl`, {
         method: 'POST'
       });
       

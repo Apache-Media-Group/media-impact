@@ -1,7 +1,7 @@
 // frontend/src/components/admin/CredentialModal.tsx
 import React, { useState, useEffect } from 'react';
 import { Key, RefreshCw, Save } from 'lucide-react';
-import { API_BASE_URL } from './types';
+import { secureFetch } from '../../services/apiClient';
 
 interface CredentialModalProps {
   isOpen: boolean;
@@ -71,9 +71,8 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     
     try {
       setValidatingGa4(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-ga4-credentials`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/validate-ga4-credentials`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           credentials_json: secretValue.trim()
         })
@@ -110,7 +109,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     
     try {
       setValidatingGa4(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-ga4-properties?credentials_json=${encodeURIComponent(secretValue.trim())}&account_id=${encodeURIComponent(accountId)}`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/validate-ga4-properties?credentials_json=${encodeURIComponent(secretValue.trim())}&account_id=${encodeURIComponent(accountId)}`);
       
       if (res.ok) {
         const data = await res.json();
@@ -134,9 +133,8 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     
     try {
       setValidatingAdobe(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-adobe-credentials`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/validate-adobe-credentials`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           client_id: adobeClientId.trim(),
           client_secret: adobeClientSecret.trim(),
@@ -175,7 +173,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     
     try {
       setValidatingAdobe(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/validate-adobe-properties?client_id=${encodeURIComponent(adobeClientId.trim())}&client_secret=${encodeURIComponent(adobeClientSecret.trim())}&org_id=${encodeURIComponent(adobeOrgId.trim())}&company_id=${encodeURIComponent(companyId)}`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/validate-adobe-properties?client_id=${encodeURIComponent(adobeClientId.trim())}&client_secret=${encodeURIComponent(adobeClientSecret.trim())}&org_id=${encodeURIComponent(adobeOrgId.trim())}&company_id=${encodeURIComponent(companyId)}`);
       
       if (res.ok) {
         const data = await res.json();
@@ -196,7 +194,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
   const handleRedeployEtl = async () => {
     try {
       setRedeploying(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${tenantId}/redeploy-etl`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/redeploy-etl`, {
         method: 'POST'
       });
       
@@ -243,9 +241,8 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
 
     try {
       setSaving(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants/${tenantId}/secrets`, {
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/secrets`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ secret_type: secretType, secret_value: finalSecretValue })
       });
 

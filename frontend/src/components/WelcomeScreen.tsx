@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { ShieldCheck, Users, Lock, ChevronRight, AlertCircle, CheckCircle2, ArrowRight } from 'lucide-react';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, googleProvider } from '../firebase';
+import { secureFetch } from '../services/apiClient';
 
 interface WelcomeScreenProps {
   onSelectGA4: () => void;
@@ -74,11 +75,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
     try {
       setValidatingTenant(true);
-      const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? 'http://localhost:8080' 
-        : '';
-      
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/tenant/config?tenant=${cleanId}`);
+      const res = await secureFetch(`/api/v1/mcp-analytics/tenant/config?tenant=${cleanId}`);
       if (res.ok) {
         const data = await res.json();
         // Si el tenant existe en Firestore o es uno de los fallbacks permitidos, redireccionar

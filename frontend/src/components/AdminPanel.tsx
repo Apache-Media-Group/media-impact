@@ -1,11 +1,12 @@
 // frontend/src/components/AdminPanel.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { ShieldCheck, Plus, ArrowLeft, RefreshCw, AlertCircle, CheckCircle2, LogOut, User } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { auth } from '../firebase';
+import { secureFetch } from '../services/apiClient';
 
 // Subcomponentes y Tipos
 import type { TenantConfig } from './admin/types';
-import { API_BASE_URL } from './admin/types';
 import { TenantTable } from './admin/TenantTable';
 import { TenantModal } from './admin/TenantModal';
 import { CredentialModal } from './admin/CredentialModal';
@@ -19,8 +20,6 @@ interface AdminPanelProps {
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({ adminEmailProp, onBack, onPreviewTenant }) => {
-  const [tenants, setTenants] = useState<TenantConfig[]>([]);
-  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Selector de pestañas
@@ -50,53 +49,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminEmailProp, onBack, 
     }
   };
 
-  // Cargar Tenants
-  const fetchTenants = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants`);
-      if (res.ok) {
-        const data = await res.json();
-        setTenants(data);
-      } else {
+  // Cargar Tenants e implementar Polling automático inteligente con React Query v5
+  const { data: tenants = [], isLoading: loading, refetch: fetchTenants } = useQuery<TenantConfig[]>({
+    queryKey: ['adminTenants'],
+    queryFn: async () => {
+      const res = await secureFetch('/api/v1/mcp-analytics/admin/tenants');
+      if (!res.ok) {
         throw new Error("No se pudo obtener la lista de tenants");
       }
-    } catch (err: any) {
-      console.error(err);
-      setMessage({ type: 'error', text: err.message || 'Error al conectar con el servidor' });
-    } finally {
-      setLoading(false);
+      return res.json();
+    },
+    // Polling inteligente cada 4 segundos si algún tenant está en estado 'deploying'
+    refetchInterval: (query) => {
+      const list = query.state.data as TenantConfig[] | undefined;
+      const hasActiveDeployment = list?.some(t => t.deployment_status?.status === 'deploying');
+      return hasActiveDeployment ? 4000 : false;
     }
-  };
+  });
 
-  // Polling silencioso en segundo plano para despliegues activos de Cloud Run / Scheduler
   const fetchTenantsSilently = () => {
-    fetch(`${API_BASE_URL}/api/v1/mcp-analytics/admin/tenants`)
-      .then(res => {
-        if (res.ok) return res.json();
-      })
-      .then(data => {
-        if (data) setTenants(data);
-      })
-      .catch(err => console.error("Error polling deployment status:", err));
-  };
-
-  useEffect(() => {
     fetchTenants();
-  }, []);
-
-  // Polling automático en segundo plano para actualizar el estado del despliegue en tiempo real
-  useEffect(() => {
-    const hasActiveDeployment = tenants.some(t => t.deployment_status?.status === 'deploying');
-    
-    if (hasActiveDeployment) {
-      const interval = setInterval(() => {
-        fetchTenantsSilently();
-      }, 4000);
-      
-      return () => clearInterval(interval);
-    }
-  }, [tenants]);
+  };
 
   // Manejo de Modales
   const openCreateModal = () => {
@@ -171,7 +144,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminEmailProp, onBack, 
         
         <div className="flex items-center gap-4">
           <button 
-            onClick={fetchTenants}
+            onClick={() => fetchTenants()}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors"
             disabled={loading}
           >
