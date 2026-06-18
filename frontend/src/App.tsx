@@ -37,6 +37,10 @@ const App: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const [isAdminView, setIsAdminView] = useState(false);
+  
+  // Estados de autenticación seguros y verificados por Firebase SDK
+  const [adminUserEmail, setAdminUserEmail] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   // Inicializa showDashboard en true si se accede con un tenant específico en la URL o subdominio
   const [showDashboard, setShowDashboard] = useState(() => {
@@ -64,16 +68,21 @@ const App: React.FC = () => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         const email = user.email || '';
-        if (email.toLowerCase().endsWith('@llyc.global') || email.toLowerCase().endsWith('@llyc.ai')) {
-          localStorage.setItem('admin_user_email', email.toLowerCase());
+        const emailLower = email.toLowerCase();
+        if (emailLower.endsWith('@llyc.global') || emailLower.endsWith('@llyc.ai')) {
+          setAdminUserEmail(emailLower);
+          localStorage.setItem('admin_user_email', emailLower);
         } else {
           // Expulsión automática si se cuela otra cuenta no corporativa
           auth.signOut();
+          setAdminUserEmail(null);
           localStorage.removeItem('admin_user_email');
         }
       } else {
+        setAdminUserEmail(null);
         localStorage.removeItem('admin_user_email');
       }
+      setAuthLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -84,9 +93,11 @@ const App: React.FC = () => {
       const isHashAdmin = window.location.hash === '#admin' || window.location.pathname === '/admin';
       
       if (isHashAdmin) {
-        // Verificar si existe una sesión de administrador corporativo LLYC activa
-        const savedEmail = localStorage.getItem('admin_user_email');
-        const isLlycEmail = savedEmail && (savedEmail.endsWith('@llyc.global') || savedEmail.endsWith('@llyc.ai'));
+        // Evitar falsos negativos o expulsiones prematuras mientras Firebase Auth está inicializándose
+        if (authLoading) return;
+        
+        // Verificar si existe una sesión de administrador corporativo LLYC activa y verificada
+        const isLlycEmail = adminUserEmail && (adminUserEmail.endsWith('@llyc.global') || adminUserEmail.endsWith('@llyc.ai'));
         
         if (!isLlycEmail) {
           // Bloquear el renderizado y expulsar inmediatamente a la landing
@@ -111,7 +122,7 @@ const App: React.FC = () => {
       window.removeEventListener('popstate', handleLocationChange);
       window.removeEventListener('hashchange', handleLocationChange);
     };
-  }, []);
+  }, [adminUserEmail, authLoading]);
 
   const [adminPreviewTenant, setAdminPreviewTenant] = useState<string | null>(null);
 
@@ -495,7 +506,7 @@ const App: React.FC = () => {
   };
 
   if (isAdminView) {
-    return <AdminPanel onBack={handleGoToDashboard} onPreviewTenant={handlePreviewTenant} />;
+    return <AdminPanel adminEmailProp={adminUserEmail || undefined} onBack={handleGoToDashboard} onPreviewTenant={handlePreviewTenant} />;
   }
 
   if (!showDashboard) {

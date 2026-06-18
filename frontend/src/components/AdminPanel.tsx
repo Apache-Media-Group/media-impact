@@ -13,11 +13,12 @@ import { AuditModal } from './admin/AuditModal';
 import { EtlMonitorTab } from './admin/EtlMonitorTab';
 
 interface AdminPanelProps {
+  adminEmailProp?: string;
   onBack: () => void;
   onPreviewTenant?: (tenantId: string) => void;
 }
 
-export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant }) => {
+export const AdminPanel: React.FC<AdminPanelProps> = ({ adminEmailProp, onBack, onPreviewTenant }) => {
   const [tenants, setTenants] = useState<TenantConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -35,7 +36,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ onBack, onPreviewTenant 
   const [auditTenantId, setAuditTenantId] = useState<string | null>(null);
   const [showAuditModal, setShowAuditModal] = useState(false);
 
-  const [adminEmail] = useState(localStorage.getItem('admin_user_email') || 'consultor@llyc.global');
+  const [adminEmail] = useState(adminEmailProp || localStorage.getItem('admin_user_email') || 'consultor@llyc.global');
 
   // Cerrar Sesión
   const handleLogout = async () => {
