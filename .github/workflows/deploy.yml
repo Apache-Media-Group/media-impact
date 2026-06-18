@@ -26,6 +26,8 @@ jobs:
               - 'backend/**'
             frontend:
               - 'frontend/**'
+              - 'firebase.json'
+              - '.firebaserc'
 
   # 🚀 JOB 2: Desplegar Backend (solo si hay cambios en backend/)
   deploy-backend:
