@@ -83,11 +83,11 @@ El proceso de desarrollo, confirmación y empuje de cambios debe seguir estricta
   ```bash
   git push origin <rama_actual>
   ```
-* Confirmar que el push fue exitoso ejecutando un `git status` final.
 * **Monitoreo Posterior al Push (Mandatorio)**: Inmediatamente después de realizar el push, se debe utilizar la CLI de GitHub (`gh`) para monitorear y trackear en tiempo real el progreso de la ejecución del workflow de GitHub Actions:
   ```bash
   gh run watch
   ```
+* **Documentación Posterior al Despliegue (Mandatorio)**: Una vez que el despliegue del pipeline de GitHub Actions finalice exitosamente en verde, se debe proceder obligatoriamente a registrar y documentar detalladamente todo el trabajo técnico, los hitos arquitectónicos logrados, los errores resueltos y los resultados de las verificaciones en un archivo markdown estructurado dentro del directorio `developers_log/` siguiendo la convención de nomenclatura `YYYY-MM-DD-<tema-sprint>.md`.
 
 ---
 
