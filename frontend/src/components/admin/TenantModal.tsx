@@ -20,10 +20,28 @@ export const TenantModal: React.FC<TenantModalProps> = ({
   const [editingTenant, setEditingTenant] = useState<TenantConfig>(tenant);
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [emailsInput, setEmailsInput] = useState('');
+  const [domainsInput, setDomainsInput] = useState('');
 
   useEffect(() => {
     setEditingTenant(tenant);
+    setEmailsInput(tenant.authorized_emails ? tenant.authorized_emails.join(', ') : '');
+    setDomainsInput(tenant.authorized_domains ? tenant.authorized_domains.join(', ') : '');
   }, [tenant]);
+
+  const handleEmailsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setEmailsInput(value);
+    const list = value.split(',').map(item => item.trim()).filter(Boolean);
+    setEditingTenant(prev => ({ ...prev, authorized_emails: list }));
+  };
+
+  const handleDomainsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setDomainsInput(value);
+    const list = value.split(',').map(item => item.trim()).filter(Boolean);
+    setEditingTenant(prev => ({ ...prev, authorized_domains: list }));
+  };
 
   if (!isOpen) return null;
 
@@ -91,7 +109,7 @@ export const TenantModal: React.FC<TenantModalProps> = ({
           </h3>
         </div>
         
-        <form onSubmit={handleSaveTenant} className="p-6 space-y-4">
+        <form onSubmit={handleSaveTenant} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">ID del Cliente (Tenant ID)</label>
             <input 
@@ -201,6 +219,46 @@ export const TenantModal: React.FC<TenantModalProps> = ({
               required
               className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
             />
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Correos Autorizados (Separados por comas)</label>
+            <input 
+              type="text" 
+              value={emailsInput}
+              onChange={handleEmailsChange}
+              placeholder="ej: cliente@empresa.com, gerente@empresa.com"
+              className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
+            />
+            {editingTenant.authorized_emails && editingTenant.authorized_emails.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5 max-h-[60px] overflow-y-auto">
+                {editingTenant.authorized_emails.map((email, idx) => (
+                  <span key={idx} className="px-2 py-0.5 bg-red/10 border border-red/20 rounded text-[10px] text-red font-semibold">
+                    {email}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Dominios Corporativos Autorizados (Separados por comas)</label>
+            <input 
+              type="text" 
+              value={domainsInput}
+              onChange={handleDomainsChange}
+              placeholder="ej: empresa.com, filial.es"
+              className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
+            />
+            {editingTenant.authorized_domains && editingTenant.authorized_domains.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5 max-h-[60px] overflow-y-auto">
+                {editingTenant.authorized_domains.map((domain, idx) => (
+                  <span key={idx} className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-[10px] text-blue-400 font-semibold">
+                    {domain}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">

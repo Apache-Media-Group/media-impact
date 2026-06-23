@@ -30,6 +30,9 @@ class TenantAdminRequest(BaseModel):
     secondary_color: str = Field(..., description="Color secundario hexadecimal (ej: '#00A2E2')")
     font_family: str = Field(default="Open Sans, sans-serif", description="Familia tipográfica")
     support_email: str = Field(..., description="Email de soporte del cliente")
+    authorized_emails: List[str] = Field(default=[], description="Lista de correos autorizados para este tenant")
+    authorized_domains: List[str] = Field(default=[], description="Lista de dominios de correo corporativos autorizados")
+
 
 class TenantSecretRequest(BaseModel):
     secret_type: str = Field(..., description="Tipo de secreto (ej: 'brandlight-key', 'peec-key')")
@@ -214,7 +217,14 @@ async def list_tenants_admin(user_email: str = Depends(get_current_admin)):
                         current_secrets[st] = False
                 tdata["configured_secrets"] = current_secrets
                 
+            # Inicializar de forma segura listas ACL si no existen
+            if "authorized_emails" not in tdata or not isinstance(tdata["authorized_emails"], list):
+                tdata["authorized_emails"] = []
+            if "authorized_domains" not in tdata or not isinstance(tdata["authorized_domains"], list):
+                tdata["authorized_domains"] = []
+                
             tenants.append(tdata)
+
             
         return tenants
     except Exception as e:
@@ -241,9 +251,12 @@ async def create_or_update_tenant_admin(
             "secondary_color": tenant_req.secondary_color,
             "font_family": tenant_req.font_family,
             "support_email": tenant_req.support_email,
+            "authorized_emails": [e.lower().strip() for e in tenant_req.authorized_emails if e.strip()],
+            "authorized_domains": [d.lower().strip() for d in tenant_req.authorized_domains if d.strip()],
             "updated_by": user_email,
             "updated_at": datetime.utcnow().isoformat()
         }
+
         
         # Mantener secrets configurados si ya existen o inicializar de forma limpia
         if tm.db:

@@ -6,7 +6,7 @@ from typing import Optional, List, Dict, Any
 from fastapi import APIRouter, HTTPException, Depends, Query, File, UploadFile
 
 from app.core.config import settings
-from app.services.auth_middleware import get_current_user
+from app.services.auth_middleware import get_current_user, verify_tenant_access
 from app.services.auth_utils import TokenManager, RBACManager
 from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
 from app.services.mcp_analytics.ga_advanced_service import GA4AdvancedService
@@ -192,6 +192,10 @@ async def run_report(
     s_id = request.session_id or session_id
     c_id = request.connection_id or connection_id
     t_id = request.tenant_id
+    
+    # Validar acceso al tenant si se provee uno
+    if t_id:
+        await verify_tenant_access(t_id, user_email)
     
     # Si se pasa un tenant_id, intentar recuperar datos consolidados reales desde BigQuery
     if t_id:

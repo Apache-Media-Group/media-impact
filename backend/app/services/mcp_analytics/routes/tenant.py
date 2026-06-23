@@ -2,13 +2,15 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Request, Query, HTTPException
+from fastapi import APIRouter, Request, Query, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.services.auth_utils import TokenManager
+from app.services.auth_middleware import get_current_user, verify_tenant_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
 
 class TenantConfigResponse(BaseModel):
     tenant_id: str
@@ -76,3 +78,18 @@ async def get_tenant_config(request: Request, tenant: Optional[str] = Query(None
         )
         
     return config
+
+
+@router.get("/tenant/verify")
+async def verify_tenant_access_endpoint(
+    tenant: str = Query(..., description="ID del tenant a verificar"),
+    user_email: str = Depends(get_current_user)
+):
+    """
+    Verifica de forma segura si el usuario autenticado por Firebase Auth
+    tiene acceso al tenant especificado. Retorna 200 si tiene acceso,
+    o lanza un error 403/404 controlado.
+    """
+    await verify_tenant_access(tenant, user_email)
+    return {"status": "ok", "authorized": True, "user_email": user_email}
+

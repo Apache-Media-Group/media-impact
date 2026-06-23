@@ -8,6 +8,8 @@ export interface TenantConfig {
   secondary_color: string;
   font_family: string;
   support_email: string;
+  authorized_emails?: string[];
+  authorized_domains?: string[];
   updated_at?: string;
   configured_secrets?: {
     'brandlight-key'?: boolean;

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { WelcomeScreen } from './components/WelcomeScreen';
+import { ClientLoginScreen } from './components/ClientLoginScreen';
 import { Header, FilterBar } from './components/DashboardLayout';
 import { KpiCard } from './components/KpiCard';
 import { ChartWidget } from './components/ChartWidget';
@@ -41,7 +42,22 @@ const App: React.FC = () => {
   
   // Estados de autenticación seguros y verificados por Firebase SDK
   const [adminUserEmail, setAdminUserEmail] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  
+  const [tenant, setTenant] = useState<TenantConfig>({
+    tenant_id: 'llyc',
+    tenant_name: 'LLYC Intelligence',
+    logo_url: '/logo_llyc.svg',
+    primary_color: '#F54963',
+    secondary_color: '#36A7B7',
+    font_family: 'Montserrat, sans-serif',
+    support_email: 'intelligence.mcp@llyc.global'
+  });
+
+  // Estados de autorización de inquilino para clientes
+  const [isTenantAuthorized, setIsTenantAuthorized] = useState<boolean | null>(null);
+  const [verifyingAccess, setVerifyingAccess] = useState(false);
 
   // Inicializa showDashboard en true si se accede con un tenant específico en la URL o subdominio
   const [showDashboard, setShowDashboard] = useState(() => {
@@ -70,16 +86,17 @@ const App: React.FC = () => {
       if (user) {
         const email = user.email || '';
         const emailLower = email.toLowerCase();
+        setCurrentUserEmail(emailLower);
+        
         if (emailLower.endsWith('@llyc.global') || emailLower.endsWith('@llyc.ai')) {
           setAdminUserEmail(emailLower);
           localStorage.setItem('admin_user_email', emailLower);
         } else {
-          // Expulsión automática si se cuela otra cuenta no corporativa
-          auth.signOut();
           setAdminUserEmail(null);
           localStorage.removeItem('admin_user_email');
         }
       } else {
+        setCurrentUserEmail(null);
         setAdminUserEmail(null);
         localStorage.removeItem('admin_user_email');
       }
@@ -87,6 +104,40 @@ const App: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // 1.1. Verificar acceso del usuario actual al inquilino seleccionado
+  useEffect(() => {
+    if (!showDashboard || !tenant?.tenant_id) return;
+
+    if (!currentUserEmail) {
+      setIsTenantAuthorized(false);
+      return;
+    }
+
+    const checkAccess = async () => {
+      try {
+        setVerifyingAccess(true);
+        const res = await secureFetch(`/api/v1/mcp-analytics/tenant/verify?tenant=${tenant.tenant_id}`);
+        if (res.ok) {
+          const result = await res.json();
+          if (result.authorized) {
+            setIsTenantAuthorized(true);
+          } else {
+            setIsTenantAuthorized(false);
+          }
+        } else {
+          setIsTenantAuthorized(false);
+        }
+      } catch (err) {
+        console.error("Error verificando acceso al inquilino:", err);
+        setIsTenantAuthorized(false);
+      } finally {
+        setVerifyingAccess(false);
+      }
+    };
+
+    checkAccess();
+  }, [showDashboard, currentUserEmail, tenant?.tenant_id]);
 
   // 2. Guardia de Ruta Estricto en el Ruteo Nativo de la SPA
   useEffect(() => {
@@ -161,15 +212,6 @@ const App: React.FC = () => {
     setShowDashboard(true); // Saltar WelcomeScreen al volver de admin
   };
 
-  const [tenant, setTenant] = useState<TenantConfig>({
-    tenant_id: 'llyc',
-    tenant_name: 'LLYC Intelligence',
-    logo_url: '/logo_llyc.svg',
-    primary_color: '#F54963',
-    secondary_color: '#36A7B7',
-    font_family: 'Montserrat, sans-serif',
-    support_email: 'intelligence.mcp@llyc.global'
-  });
 
   // Orígenes de datos, Cuentas, Propiedades y Segmentos
   const [connections, setConnections] = useState<any[]>([
@@ -497,6 +539,27 @@ const App: React.FC = () => {
         onSelectPeec={handleSelectPeec}
         onFileUpload={handleFileUpload}
         tenant={tenant}
+      />
+    );
+  }
+
+  // Pantalla de carga mientras se inicializa Auth o se verifica el acceso en vivo
+  if (authLoading || (currentUserEmail && verifyingAccess)) {
+    return (
+      <div className="fixed inset-0 bg-[#060c18] flex flex-col items-center justify-center p-5 z-[1000] gap-4">
+        <div className="w-12 h-12 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: tenant.primary_color || '#E51D24', borderTopColor: 'transparent' }} />
+        <p className="text-white text-xs uppercase tracking-widest font-bold">Verificando Credenciales de {tenant.tenant_name}…</p>
+      </div>
+    );
+  }
+
+  // Pantalla de inicio de sesión o acceso restringido si no está autorizado
+  if (!isTenantAuthorized) {
+    return (
+      <ClientLoginScreen 
+        tenant={tenant}
+        isAccessDenied={!!currentUserEmail}
+        onClearAccessDenied={() => setIsTenantAuthorized(null)}
       />
     );
   }

@@ -1,5 +1,6 @@
 import os
 import logging
+from typing import Optional
 from fastapi import Security, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import firebase_admin
@@ -76,4 +77,78 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
             detail=f"Token de Firebase inválido o expirado: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+
+async def verify_tenant_access(tenant_id: Optional[str], user_email: str) -> None:
+    """
+    Verifica si un usuario autenticado por Firebase Auth tiene permisos para visualizar
+    o consultar datos de un Tenant específico.
+    Si no tiene acceso, lanza HTTPException 403 Forbidden.
+    """
+    if not tenant_id:
+        return  # Si no hay tenant_id, no restringimos por inquilino
+
+    tenant_id_clean = tenant_id.lower().strip()
+    user_email_clean = user_email.lower().strip()
+
+    # 1. Bypass para Superadmins de LLYC
+    if user_email_clean.endswith("@llyc.global") or user_email_clean.endswith("@llyc.ai"):
+        return
+
+    # 2. Si el tenant solicitado es 'llyc', solo permitimos LLYC (ya cubierto por el bypass anterior)
+    if tenant_id_clean == "llyc":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Acceso denegado: Se requiere una cuenta corporativa de LLYC para acceder a este inquilino.",
+        )
+
+    # 3. Consultar configuración del Tenant en Firestore
+    try:
+        from app.services.auth_utils import TokenManager
+        tm = TokenManager()
+        if tm.db:
+            doc = tm.db.collection("tenants").document(tenant_id_clean).get()
+            if doc.exists:
+                tdata = doc.to_dict()
+                authorized_emails = [e.lower().strip() for e in tdata.get("authorized_emails", [])]
+                authorized_domains = [d.lower().strip() for d in tdata.get("authorized_domains", [])]
+
+                # Comprobar email directo
+                if user_email_clean in authorized_emails:
+                    return
+
+                # Comprobar dominio corporativo
+                email_parts = user_email_clean.split("@")
+                if len(email_parts) == 2:
+                    domain = email_parts[1]
+                    if domain in authorized_domains:
+                        return
+
+                # Si no está autorizado
+                logger.warning(f"❌ [AUTH ERROR] El usuario '{user_email_clean}' intentó acceder al tenant '{tenant_id_clean}' pero no está autorizado.")
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Acceso denegado: Tu cuenta '{user_email}' no está autorizada para ver el dashboard de '{tenant_id_clean}'.",
+                )
+            else:
+                # Si el tenant no existe en Firestore, no autorizar por defecto
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Cliente '{tenant_id_clean}' no registrado en la plataforma.",
+                )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error verificando acceso al tenant {tenant_id_clean}: {e}")
+        # En caso de error técnico, ser restrictivos excepto si es dev local con bypass habilitado
+        is_production = os.getenv("K_SERVICE") is not None or os.getenv("ENVIRONMENT") == "production"
+        bypass_local = os.getenv("BYPASS_AUTH_LOCAL", "false").lower() == "true"
+        if not is_production and bypass_local:
+            logger.warning(f"[AUTH BYPASS] Error validando acceso en dev local. Permitiendo acceso por bypass.")
+            return
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno al verificar permisos de acceso al cliente: {str(e)}"
+        )
+
 
