@@ -1,5 +1,5 @@
 // frontend/src/components/ClientLoginScreen.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
   Mail, 
@@ -9,7 +9,10 @@ import {
   ArrowLeft, 
   AlertCircle, 
   CheckCircle2, 
-  ExternalLink 
+  ExternalLink,
+  ShieldCheck,
+  KeyRound,
+  RefreshCw
 } from 'lucide-react';
 import { 
   signInWithEmailAndPassword, 
@@ -20,17 +23,22 @@ import {
 } from 'firebase/auth';
 import { auth } from '../firebase';
 import type { TenantConfig } from './admin/types';
+import { secureFetch } from '../services/apiClient';
 
 interface ClientLoginScreenProps {
   tenant: TenantConfig;
   isAccessDenied: boolean;
   onClearAccessDenied: () => void;
+  is2faRequired?: boolean;
+  on2faSuccess?: () => void;
 }
 
 export const ClientLoginScreen: React.FC<ClientLoginScreenProps> = ({
   tenant,
   isAccessDenied,
-  onClearAccessDenied
+  onClearAccessDenied,
+  is2faRequired = false,
+  on2faSuccess
 }) => {
   const [activeTab, setActiveTab] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
@@ -41,8 +49,99 @@ export const ClientLoginScreen: React.FC<ClientLoginScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Estados para 2FA OTP
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const [otpSuccess, setOtpSuccess] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [otpSentOnce, setOtpSentOnce] = useState(false);
+
   const primaryColor = tenant.primary_color || '#E51D24';
   const secondaryColor = tenant.secondary_color || '#1C2541';
+
+  // Reenvío automático de OTP al cargar la vista de 2FA
+  useEffect(() => {
+    if (is2faRequired && !otpSentOnce) {
+      handleSendOtp();
+      setOtpSentOnce(true);
+    }
+  }, [is2faRequired, otpSentOnce]);
+
+  // Cuenta regresiva del reenvío de OTP
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleSendOtp = async () => {
+    if (resendCooldown > 0 || otpLoading) return;
+    
+    setOtpLoading(true);
+    setOtpError(null);
+    setOtpSuccess(null);
+    
+    try {
+      const res = await secureFetch('/api/v1/mcp-analytics/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tenant: tenant.tenant_id }),
+      });
+      
+      if (res.ok) {
+        setOtpSuccess('Código de seguridad enviado a tu dirección de correo electrónico.');
+        setResendCooldown(60);
+      } else {
+        const data = await res.json();
+        setOtpError(data.detail || 'No se pudo enviar el código de verificación.');
+      }
+    } catch (err) {
+      console.error("Error al enviar OTP:", err);
+      setOtpError('Error de red al enviar el código de seguridad.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (otpCode.length !== 6 || otpLoading) return;
+
+    setOtpLoading(true);
+    setOtpError(null);
+    setOtpSuccess(null);
+
+    try {
+      const res = await secureFetch('/api/v1/mcp-analytics/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tenant: tenant.tenant_id,
+          code: otpCode
+        })
+      });
+
+      if (res.ok) {
+        setOtpSuccess('Identidad verificada con éxito. Accediendo...');
+        setTimeout(() => {
+          if (on2faSuccess) {
+            on2faSuccess();
+          }
+        }, 1500);
+      } else {
+        const data = await res.json();
+        setOtpError(data.detail || 'Código incorrecto o vencido.');
+      }
+    } catch (err) {
+      console.error("Error al verificar OTP:", err);
+      setOtpError('Error de red al verificar el código.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
 
   // 1. Google Auth para Clientes sin restricciones de subdominio LLYC
   const handleGoogleSignIn = async () => {
@@ -207,6 +306,143 @@ export const ClientLoginScreen: React.FC<ClientLoginScreenProps> = ({
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Usar otra cuenta</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (is2faRequired) {
+    // VISTA DE VERIFICACIÓN 2FA OTP (BRANDED PREMIUM)
+    return (
+      <div className="fixed inset-0 bg-[#060c18] flex items-center justify-center p-5 z-[1000] overflow-y-auto">
+        {/* Fondo con degradado animado y color secundario del cliente */}
+        <div 
+          className="absolute inset-0 opacity-20 pointer-events-none transition-all duration-1000"
+          style={{
+            background: `radial-gradient(circle at center, ${primaryColor} 0%, transparent 70%)`
+          }}
+        />
+
+        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 max-w-md w-full shadow-2xl relative backdrop-blur-md text-center">
+          {/* Logo o Marca del Inquilino */}
+          <div className="mb-6">
+            {tenant.logo_url ? (
+              <img src={tenant.logo_url} alt={tenant.tenant_name} className="h-10 object-contain mb-4 mx-auto max-w-[180px]" />
+            ) : (
+              <div className="text-white font-black text-2xl mb-3 tracking-tighter" style={{ color: primaryColor }}>
+                {tenant.tenant_name}
+              </div>
+            )}
+            <p className="text-[10px] text-mid uppercase tracking-widest font-semibold text-white/40 mt-1">
+              Marketing Control Panel
+            </p>
+          </div>
+
+          {/* Icono de Escudo/2FA con micro-animación */}
+          <div className="relative w-16 h-16 mx-auto mb-6 flex items-center justify-center">
+            <div 
+              className="absolute inset-0 rounded-2xl opacity-10 animate-pulse"
+              style={{ backgroundColor: primaryColor }}
+            />
+            <div 
+              className="relative w-14 h-16 rounded-2xl bg-white/5 border flex items-center justify-center text-white"
+              style={{ borderColor: `${primaryColor}40` }}
+            >
+              <ShieldCheck className="w-8 h-8" style={{ color: primaryColor }} />
+            </div>
+          </div>
+
+          <h2 className="text-xl font-black text-white tracking-tight mb-2">Verificación de Seguridad</h2>
+          <p className="text-xs text-mid mb-6 leading-relaxed">
+            Hemos enviado un código OTP de 6 dígitos a tu dirección de correo electrónico vinculada: <strong className="text-white font-semibold">{auth.currentUser?.email || email}</strong>
+          </p>
+
+          {/* Alertas */}
+          {otpError && (
+            <div className="p-3.5 bg-red-500/10 border border-red-500/20 text-red-400 rounded-xl flex items-start gap-2.5 text-xs text-left mb-5 leading-normal font-medium">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{otpError}</span>
+            </div>
+          )}
+
+          {otpSuccess && (
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl flex items-start gap-2.5 text-xs text-left mb-5 leading-normal font-medium">
+              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 animate-pulse" />
+              <span>{otpSuccess}</span>
+            </div>
+          )}
+
+          {/* Formulario de Código OTP */}
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
+            <div>
+              <label className="block text-[9px] font-black uppercase tracking-wider text-white/50 text-left mb-2">
+                Código de 6 dígitos
+              </label>
+              <div className="relative">
+                <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-mid" />
+                <input 
+                  type="text"
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  required
+                  maxLength={6}
+                  disabled={otpLoading}
+                  className="w-full bg-[#0a1829]/60 border border-white/10 rounded-xl pl-12 pr-4 py-3 text-2xl font-black text-white tracking-[0.5em] font-mono focus:outline-none focus:border-white/30 transition-all text-center placeholder:opacity-20 placeholder:tracking-normal"
+                  style={{
+                    caretColor: primaryColor,
+                  }}
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={otpLoading || otpCode.length !== 6}
+              className="w-full py-3 rounded-xl text-white text-xs font-black flex items-center justify-center gap-2 hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-30 disabled:scale-100"
+              style={{ backgroundColor: primaryColor }}
+            >
+              {otpLoading ? (
+                <>
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  <span>Verificando...</span>
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Verificar Código</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Reenvío de código */}
+          <div className="mt-6 flex flex-col items-center gap-3">
+            {resendCooldown > 0 ? (
+              <p className="text-[11px] text-mid/60 font-semibold flex items-center gap-1.5">
+                <RefreshCw className="w-3.5 h-3.5 text-mid/40 animate-spin" />
+                <span>¿No recibiste el correo? Solicitar reenvío en <strong className="text-white">{resendCooldown}s</strong></span>
+              </p>
+            ) : (
+              <button
+                onClick={handleSendOtp}
+                disabled={otpLoading}
+                className="text-[11px] font-bold uppercase tracking-wider text-mid hover:text-white transition-colors flex items-center gap-1.5"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${otpLoading ? 'animate-spin' : ''}`} />
+                <span>Reenviar código de seguridad</span>
+              </button>
+            )}
+
+            <button
+              onClick={handleLogoutAndRetry}
+              disabled={otpLoading}
+              className="inline-flex items-center gap-1.5 text-[10px] text-mid/55 hover:text-white uppercase tracking-wider font-semibold transition-colors mt-2"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Usar otra cuenta / Salir</span>
             </button>
           </div>
         </div>

@@ -266,3 +266,52 @@ class NotificationManager:
         except Exception as e:
             logger.error(f"Error enviando email vía SMTP: {e}")
             return False
+
+    async def send_otp_email(self, to_email: str, otp_code: str, tenant_name: str) -> bool:
+        """
+        Envía un email con el código OTP de 2FA al usuario.
+        """
+        subject = f"🔑 Tu código de verificación para {tenant_name}: {otp_code}"
+        html_content = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; }}
+        .container {{ max-width: 500px; margin: 0 auto; padding: 25px; background-color: #f8fafc; border-radius: 16px; border: 1px solid #e2e8f0; }}
+        .header {{ text-align: center; margin-bottom: 25px; }}
+        .otp-box {{ background-color: #f1f5f9; padding: 20px; border-radius: 12px; text-align: center; font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #1e293b; border: 1px solid #cbd5e1; margin: 20px 0; }}
+        .footer {{ font-size: 11px; color: #64748b; text-align: center; margin-top: 25px; border-top: 1px solid #e2e8f0; padding-top: 15px; }}
+        .accent {{ color: #E51D24; font-weight: 700; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h2 style="margin: 0; color: #0f172a;">Verificación de Dos Factores (2FA)</h2>
+            <p style="margin: 5px 0 0 0; font-size: 14px; color: #64748b;">Marketing Control Panel - {tenant_name}</p>
+        </div>
+        <p>Hola,</p>
+        <p>Has iniciado sesión en el dashboard analítico de <strong>{tenant_name}</strong>. Para completar tu acceso seguro, ingresa el siguiente código de un solo uso (OTP):</p>
+        
+        <div class="otp-box">{otp_code}</div>
+        
+        <p style="font-size: 12px; color: #64748b;">Este código es válido por <strong class="accent">5 minutos</strong>. Si no solicitaste este código, por favor ignora este correo.</p>
+        
+        <div class="footer">
+            Generado automáticamente por LLYC Intelligence.<br>
+            No respondas a este correo electrónico.
+        </div>
+    </div>
+</body>
+</html>
+"""
+        # Cambiar temporalmente recipient_email para enviar al usuario correcto
+        old_recipient = self.recipient_email
+        try:
+            self.recipient_email = to_email
+            return await self._send_email(subject, html_content)
+        finally:
+            self.recipient_email = old_recipient
+

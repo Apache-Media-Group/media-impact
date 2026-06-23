@@ -58,6 +58,7 @@ const App: React.FC = () => {
   // Estados de autorización de inquilino para clientes
   const [isTenantAuthorized, setIsTenantAuthorized] = useState<boolean | null>(null);
   const [verifyingAccess, setVerifyingAccess] = useState(false);
+  const [is2faRequired, setIs2faRequired] = useState(false);
 
   // Inicializa showDashboard en true si se accede con un tenant específico en la URL o subdominio
   const [showDashboard, setShowDashboard] = useState(() => {
@@ -111,6 +112,7 @@ const App: React.FC = () => {
 
     if (!currentUserEmail) {
       setIsTenantAuthorized(false);
+      setIs2faRequired(false);
       return;
     }
 
@@ -122,15 +124,22 @@ const App: React.FC = () => {
           const result = await res.json();
           if (result.authorized) {
             setIsTenantAuthorized(true);
+            setIs2faRequired(false);
+          } else if (result['2fa_required']) {
+            setIs2faRequired(true);
+            setIsTenantAuthorized(false);
           } else {
             setIsTenantAuthorized(false);
+            setIs2faRequired(false);
           }
         } else {
           setIsTenantAuthorized(false);
+          setIs2faRequired(false);
         }
       } catch (err) {
         console.error("Error verificando acceso al inquilino:", err);
         setIsTenantAuthorized(false);
+        setIs2faRequired(false);
       } finally {
         setVerifyingAccess(false);
       }
@@ -558,8 +567,16 @@ const App: React.FC = () => {
     return (
       <ClientLoginScreen 
         tenant={tenant}
-        isAccessDenied={!!currentUserEmail}
-        onClearAccessDenied={() => setIsTenantAuthorized(null)}
+        isAccessDenied={!!currentUserEmail && !is2faRequired}
+        onClearAccessDenied={() => {
+          setIsTenantAuthorized(null);
+          setIs2faRequired(false);
+        }}
+        is2faRequired={is2faRequired}
+        on2faSuccess={() => {
+          setIs2faRequired(false);
+          setIsTenantAuthorized(true);
+        }}
       />
     );
   }

@@ -195,7 +195,7 @@ async def run_report(
     
     # Validar acceso al tenant si se provee uno
     if t_id:
-        await verify_tenant_access(t_id, user_email)
+        await verify_tenant_access(t_id, user_email, enforce_2fa=True)
     
     # Si se pasa un tenant_id, intentar recuperar datos consolidados reales desde BigQuery
     if t_id:

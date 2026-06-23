@@ -79,11 +79,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
         )
 
 
-async def verify_tenant_access(tenant_id: Optional[str], user_email: str) -> None:
+async def verify_tenant_access(tenant_id: Optional[str], user_email: str, enforce_2fa: bool = False) -> None:
     """
     Verifica si un usuario autenticado por Firebase Auth tiene permisos para visualizar
     o consultar datos de un Tenant específico.
-    Si no tiene acceso, lanza HTTPException 403 Forbidden.
+    Si no tiene acceso (o si se requiere 2FA y no se ha completado), lanza HTTPException 403 Forbidden.
     """
     if not tenant_id:
         return  # Si no hay tenant_id, no restringimos por inquilino
@@ -114,22 +114,35 @@ async def verify_tenant_access(tenant_id: Optional[str], user_email: str) -> Non
                 authorized_domains = [d.lower().strip() for d in tdata.get("authorized_domains", [])]
 
                 # Comprobar email directo
-                if user_email_clean in authorized_emails:
-                    return
+                email_authorized = user_email_clean in authorized_emails
 
                 # Comprobar dominio corporativo
+                domain_authorized = False
                 email_parts = user_email_clean.split("@")
                 if len(email_parts) == 2:
                     domain = email_parts[1]
                     if domain in authorized_domains:
-                        return
+                        domain_authorized = True
 
                 # Si no está autorizado
-                logger.warning(f"❌ [AUTH ERROR] El usuario '{user_email_clean}' intentó acceder al tenant '{tenant_id_clean}' pero no está autorizado.")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Acceso denegado: Tu cuenta '{user_email}' no está autorizada para ver el dashboard de '{tenant_id_clean}'.",
-                )
+                if not email_authorized and not domain_authorized:
+                    logger.warning(f"❌ [AUTH ERROR] El usuario '{user_email_clean}' intentó acceder al tenant '{tenant_id_clean}' pero no está autorizado.")
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"Acceso denegado: Tu cuenta '{user_email}' no está autorizada para ver el dashboard de '{tenant_id_clean}'.",
+                    )
+
+                # Si está en whitelist, verificar 2FA si es exigido
+                if enforce_2fa:
+                    from app.services.otp_service import otp_service
+                    if not otp_service.is_2fa_verified(tenant_id_clean, user_email_clean):
+                        logger.warning(f"🔒 [2FA REQUIRED] El usuario '{user_email_clean}' está autorizado en whitelist pero aún no ha validado su 2FA para el tenant '{tenant_id_clean}'.")
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="2FA_REQUIRED"
+                        )
+
+                return
             else:
                 # Si el tenant no existe en Firestore, no autorizar por defecto
                 raise HTTPException(
