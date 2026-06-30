@@ -24,6 +24,7 @@ app.add_middleware(
 from app.services.mcp_analytics.endpoints import router as mcp_router
 
 app.include_router(mcp_router, prefix="/api/v1/mcp-analytics", tags=["MCP Analytics"])
+app.include_router(mcp_router, prefix="/media-impact/api/v1/mcp-analytics", tags=["MCP Analytics"])
 
 @app.get("/")
 async def root():

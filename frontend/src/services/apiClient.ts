@@ -12,7 +12,14 @@ export const API_BASE_URL = window.location.hostname === 'localhost' || window.l
  * 3. Reactive-extracts and injects the Firebase ID token in 'Authorization: Bearer <JWT>' if user is authenticated.
  */
 export async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
-  const absoluteUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
+  let finalUrl = url;
+  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // En producción, si la URL es relativa y empieza con /api/, anteponer /media-impact
+    if (!url.startsWith('http') && url.startsWith('/api/')) {
+      finalUrl = `/media-impact${url}`;
+    }
+  }
+  const absoluteUrl = finalUrl.startsWith('http') ? finalUrl : `${API_BASE_URL}${finalUrl}`;
   const headers = new Headers(options.headers || {});
 
   // Automatically set Content-Type if we have a string body and no explicit header

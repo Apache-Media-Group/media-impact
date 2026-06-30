@@ -44,6 +44,13 @@
     ],
     "rewrites": [
       {
+        "source": "/media-impact/api/v1/**",
+        "run": {
+          "serviceId": "llyc-intelligence-api",
+          "region": "us-central1"
+        }
+      },
+      {
         "source": "/api/v1/**",
         "run": {
           "serviceId": "llyc-intelligence-api",

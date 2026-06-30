@@ -33,6 +33,43 @@ interface TenantConfig {
   };
 }
 
+export const getTenantFromUrl = (): string | null => {
+  // 1. Detección por query param
+  const urlParams = new URLSearchParams(window.location.search);
+  const tenantParam = urlParams.get('tenant_id') || urlParams.get('tenant');
+  if (tenantParam) {
+    return tenantParam.toLowerCase().trim();
+  }
+
+  // 2. Detección por path name (ej: /media-impact/sanitas o /media-impact/sanitas/)
+  const path = window.location.pathname;
+  if (path.startsWith('/media-impact')) {
+    const relativePath = path.substring('/media-impact'.length);
+    const segments = relativePath.split('/').filter(s => s.length > 0);
+    if (segments.length > 0) {
+      const firstSegment = segments[0].toLowerCase().trim();
+      const reserved = ['admin', 'assets', 'favicon.svg', 'logo_llyc.svg', 'icons.svg', 'index.html'];
+      if (!reserved.includes(firstSegment)) {
+        return firstSegment;
+      }
+    }
+  }
+
+  // 3. Detección por subdominio (producción)
+  const host = window.location.hostname;
+  if (host && host !== 'localhost' && host !== '127.0.0.1' && !host.endsWith('web.app')) {
+    const parts = host.split('.');
+    if (parts.length > 2) {
+      const sub = parts[0].toLowerCase().trim();
+      if (sub !== 'www' && sub !== 'dashboard' && sub !== 'analytics') {
+        return sub;
+      }
+    }
+  }
+
+  return null;
+};
+
 const App: React.FC = () => {
   const { state, data, loading, fetchData, updateState } = useAnalytics();
   const [lastUpdated, setLastUpdated] = useState('--:--');
@@ -62,22 +99,10 @@ const App: React.FC = () => {
 
   // Inicializa showDashboard en true si se accede con un tenant específico en la URL o subdominio
   const [showDashboard, setShowDashboard] = useState(() => {
-    // 1. Detección por query param
-    const urlParams = new URLSearchParams(window.location.search);
-    const tenantParam = urlParams.get('tenant_id') || urlParams.get('tenant');
-    if (tenantParam && tenantParam.toLowerCase().trim() !== 'llyc') {
+    const detected = getTenantFromUrl();
+    if (detected && detected !== 'llyc') {
       return true;
     }
-    
-    // 2. Detección por subdominio (producción)
-    const host = window.location.hostname;
-    if (host && host !== 'localhost' && host !== '127.0.0.1' && !host.endsWith('web.app')) {
-      const parts = host.split('.');
-      if (parts.length > 2 && parts[0].toLowerCase().trim() !== 'www') {
-        return true;
-      }
-    }
-    
     return false;
   });
 
@@ -332,8 +357,7 @@ const App: React.FC = () => {
 
   // 0. Efecto para cargar dinámicamente la configuración visual del Tenant (Sanitas, LLYC, etc.)
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tenantParam = urlParams.get('tenant_id') || urlParams.get('tenant');
+    const tenantParam = getTenantFromUrl();
     
     const fetchTenantConfig = async () => {
       try {
