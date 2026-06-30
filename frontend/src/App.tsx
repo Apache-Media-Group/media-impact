@@ -48,7 +48,7 @@ const App: React.FC = () => {
   const [tenant, setTenant] = useState<TenantConfig>({
     tenant_id: 'llyc',
     tenant_name: 'LLYC Intelligence',
-    logo_url: '/logo_llyc.svg',
+    logo_url: `${import.meta.env.BASE_URL}logo_llyc.svg`,
     primary_color: '#F54963',
     secondary_color: '#36A7B7',
     font_family: 'Montserrat, sans-serif',
@@ -64,7 +64,7 @@ const App: React.FC = () => {
   const [showDashboard, setShowDashboard] = useState(() => {
     // 1. Detección por query param
     const urlParams = new URLSearchParams(window.location.search);
-    const tenantParam = urlParams.get('tenant');
+    const tenantParam = urlParams.get('tenant_id') || urlParams.get('tenant');
     if (tenantParam && tenantParam.toLowerCase().trim() !== 'llyc') {
       return true;
     }
@@ -333,7 +333,7 @@ const App: React.FC = () => {
   // 0. Efecto para cargar dinámicamente la configuración visual del Tenant (Sanitas, LLYC, etc.)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const tenantParam = urlParams.get('tenant');
+    const tenantParam = urlParams.get('tenant_id') || urlParams.get('tenant');
     
     const fetchTenantConfig = async () => {
       try {

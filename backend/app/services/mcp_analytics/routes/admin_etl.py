@@ -85,7 +85,7 @@ def create_or_update_tenant_scheduler(tenant_id: str):
         from google.cloud import scheduler_v1
         client = scheduler_v1.CloudSchedulerClient()
         
-        project_id = os.getenv("GCP_PROJECT_ID") or "llyc-adtech-pruebas"
+        project_id = os.getenv("GCP_PROJECT_ID") or "llyc-ai-first-core"
         location_id = "us-central1"
         parent = f"projects/{project_id}/locations/{location_id}"
         
