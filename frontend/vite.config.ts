@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: '/media-impact/',
+  build: {
+    outDir: 'dist/media-impact',
+  },
   server: {
     port: 3000,
     strictPort: true,
