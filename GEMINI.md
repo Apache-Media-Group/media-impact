@@ -32,6 +32,9 @@ Formato: `<tipo>(<ámbito opcional>): <descripción corta en minúsculas y prese
 * **`refactor`**: Reorganización de código que no añade features ni corrige bugs.
 * **`chore`**: Tareas de mantenimiento, actualización de dependencias menores, etc.
 
+> [!CAUTION]
+> **POLÍTICA DE PRIVACIDAD CRÍTICA**: Queda estrictamente prohibido mencionar o incluir nombres reales de clientes o marcas (ej. `sanitas`, `cocacola`, etc.) en los mensajes de commit. Los commits deben ser 100% genéricos (ej. usar `tenant` o `client` en su lugar) para resguardar la confidencialidad de la cartera de clientes de LLYC en el historial público de Git.
+
 ---
 
 ## 🚨 3. Protocolo de Git y Pre-Push Mandatorio

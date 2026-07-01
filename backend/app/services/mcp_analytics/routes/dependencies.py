@@ -126,6 +126,9 @@ def get_analytics_service(
                 "org_id": "adobe-temp",
                 "company_id": "adobe-temp"
             })
+        elif connection_id == "local":
+            from app.services.mcp_analytics.ga_service import GAService
+            return GAService(credentials=None, is_local=True)
 
         tm = TokenManager()
         connection = tm.get_connection(connection_id)

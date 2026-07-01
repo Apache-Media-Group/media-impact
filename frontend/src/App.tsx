@@ -192,6 +192,7 @@ const App: React.FC = () => {
           alert("Acceso denegado: Se requiere iniciar sesión con una cuenta corporativa de LLYC (@llyc.global o @llyc.ai) para acceder al panel de administración.");
         } else {
           setIsAdminView(true);
+          setAdminPreviewTenant(null); // Limpiar modo vista previa al volver al panel de admin
         }
       } else {
         setIsAdminView(false);
@@ -229,10 +230,15 @@ const App: React.FC = () => {
           document.documentElement.style.setProperty('--teal-light', data.secondary_color + '1A');
         }
         
-        // Activar el modo de vista previa de administrador
+        // Activar el modo de vista previa de administrador y forzar estados de conexión de simulación local
         setAdminPreviewTenant(data.tenant_name);
         setIsAdminView(false);
         setShowDashboard(true);
+        updateState({
+          tenant_id: data.tenant_id,
+          connection_id: 'local',
+          property_id: 'bigquery-fact'
+        });
       }
     } catch (err) {
       console.error("Error setting preview tenant:", err);
@@ -357,6 +363,11 @@ const App: React.FC = () => {
 
   // 0. Efecto para cargar dinámicamente la configuración visual del Tenant (Sanitas, LLYC, etc.)
   useEffect(() => {
+    if (adminPreviewTenant) return;
+    
+    // Al volver al tenant por defecto, podemos limpiar los estados de simulación local
+    updateState({ connection_id: '', property_id: '' });
+
     const tenantParam = getTenantFromUrl();
     
     const fetchTenantConfig = async () => {
@@ -388,7 +399,7 @@ const App: React.FC = () => {
     };
     
     fetchTenantConfig();
-  }, []);
+  }, [adminPreviewTenant]);
 
   const [lineData, setLineData] = useState<any>({
     labels: [],

@@ -23,16 +23,18 @@ from app.services.mcp_analytics.analytics_interface import AnalyticsService
 class GAService(AnalyticsService):
     """Cliente para Google Analytics Data API."""
 
-    def __init__(self, credentials: Optional[Credentials] = None, inspector=None):
+    def __init__(self, credentials: Optional[Credentials] = None, inspector=None, is_local: bool = False):
         """
         Inicializa el servicio GA.
         
         Args:
             credentials: Credenciales OAuth2 del usuario.
             inspector: DataInspectorService para loguear tráfico raw.
+            is_local: Si es verdadero, opera en modo mockeado local sin APIs reales.
         """
         self.credentials = credentials
         self.inspector = inspector
+        self.is_local = is_local
         self._client = None
         self._admin_client = None
 
@@ -82,6 +84,14 @@ class GAService(AnalyticsService):
         """
         Lista las cuentas GA4 del usuario autenticado.
         """
+        if self.is_local:
+            return [
+                GAAccount(
+                    name="accounts/local",
+                    display_name="Local Data Source",
+                    account_id="local",
+                )
+            ]
         logger.info("Attempting to list GA4 accounts using Admin API")
         try:
             accounts = []
@@ -106,6 +116,15 @@ class GAService(AnalyticsService):
         """
         Lista las propiedades GA4.
         """
+        if self.is_local:
+            return [
+                GAProperty(
+                    name="properties/bigquery-fact",
+                    display_name="BigQuery Consolidated Data",
+                    property_id="bigquery-fact",
+                    parent="accounts/local"
+                )
+            ]
         logger.info(f"DEBUG: list_properties called with account_id={account_id}")
         try:
             properties: List[GAProperty] = []
@@ -181,6 +200,15 @@ class GAService(AnalyticsService):
         Returns:
             RunReportResponse con los datos del reporte
         """
+        if self.is_local:
+            return RunReportResponse(
+                property_id=request.property_id,
+                dimension_headers=request.dimensions,
+                metric_headers=request.metrics,
+                rows=[],
+                row_count=0,
+                metadata=None
+            )
         # Asegurar formato correcto de property_id
         property_id = request.property_id
         if not property_id.startswith("properties/") and not property_id.startswith("local:"):
@@ -256,6 +284,16 @@ class GAService(AnalyticsService):
         Args:
             property_id: ID de la propiedad (formato: properties/XXXXX)
         """
+        if self.is_local:
+            return {
+                "name": f"properties/{property_id}/metadata",
+                "dimensions": [
+                    {"api_name": "date", "ui_name": "Fecha", "description": "Fecha del reporte", "category": "Time"}
+                ],
+                "metrics": [
+                    {"api_name": "sessions", "ui_name": "Sesiones", "description": "Sesiones totales", "type": "INTEGER", "category": "Traffic"}
+                ]
+            }
         # Asegurar formato correcto de property_id
         if not property_id.startswith("properties/"):
             property_id = f"properties/{property_id}"
