@@ -11,6 +11,8 @@ import { TopicsCard } from './components/TopicsCard';
 import { DomainsTable } from './components/DomainsTable';
 import { useAnalytics } from './hooks/useAnalytics';
 import { AdminPanel } from './components/AdminPanel';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 import { Database } from 'lucide-react';
 import { secureFetch, API_BASE_URL } from './services/apiClient';
 
@@ -106,9 +108,27 @@ const App: React.FC = () => {
 
   // 1. Observador de estado de Auth oficial de Firebase para mantener consistencia de login
   useEffect(() => {
-    setCurrentUserEmail("developer@llyc.global");
-    setAdminUserEmail("developer@llyc.global");
-    setAuthLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const email = user.email || '';
+        const emailLower = email.toLowerCase();
+        setCurrentUserEmail(emailLower);
+        
+        if (emailLower.endsWith('@llyc.global') || emailLower.endsWith('@llyc.ai')) {
+          setAdminUserEmail(emailLower);
+          localStorage.setItem('admin_user_email', emailLower);
+        } else {
+          setAdminUserEmail(null);
+          localStorage.removeItem('admin_user_email');
+        }
+      } else {
+        setCurrentUserEmail(null);
+        setAdminUserEmail(null);
+        localStorage.removeItem('admin_user_email');
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
   }, []);
 
   // 1.1. Verificar acceso del usuario actual al inquilino seleccionado
