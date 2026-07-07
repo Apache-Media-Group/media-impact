@@ -239,6 +239,28 @@ class MCPETLService:
                     # Espacio de respiro proactivo (1.5 segundos) entre peticiones de segmentos
                     await asyncio.sleep(1.5)
 
+                    # 1. Calcular ratios de IA en vivo para este segmento para distribuirlos proporcionalmente de forma diaria
+                    ai_referred_ratio = 0.0
+                    ai_inferred_ratio = 0.0
+                    try:
+                        logger.info(f"Analizando impacto IA para segmento '{seg_name}' ({seg_id})...")
+                        res_ia = await adobe_service.analyze_traffic_ia(
+                            property_id=chosen_property,
+                            start_date=date_from,
+                            end_date=date_to,
+                            segment_id=seg_id if seg_id != "all-users" else None
+                        )
+                        total_sess_ia = float(res_ia.get("total_sessions", 0))
+                        if total_sess_ia > 0:
+                            known_ai_sess = sum(float(item.get("sessions", 0)) for item in res_ia.get("battle_of_ais", []))
+                            inferred_ai_sess = float(res_ia.get("inferred_traffic", {}).get("total_sessions", 0))
+                            
+                            ai_referred_ratio = known_ai_sess / total_sess_ia
+                            ai_inferred_ratio = inferred_ai_sess / total_sess_ia
+                            logger.info(f"Ratios IA calculados para '{seg_name}': referred={ai_referred_ratio:.6f}, inferred={ai_inferred_ratio:.6f}")
+                    except Exception as eia:
+                        logger.warning(f"No se pudieron calcular ratios de tráfico IA para '{seg_name}': {eia}")
+
                     # Crear petición estructurada de reporte filtrada por este segmento
                     req = RunReportRequest(
                         property_id=chosen_property,
@@ -254,15 +276,24 @@ class MCPETLService:
                         for r in res.rows:
                             raw_date = r.get("date")
                             date_str = self._clean_date_format(raw_date)
+                            
+                            total_sessions_val = int(float(r.get("sessions", 0)))
+                            ai_referred_val = round(total_sessions_val * ai_referred_ratio)
+                            ai_inferred_val = round(total_sessions_val * ai_inferred_ratio)
+                            
+                            # Asegurar de forma proactiva que la suma de IA no supere el total diario
+                            if ai_referred_val + ai_inferred_val > total_sessions_val:
+                                ai_referred_val = int(total_sessions_val * ai_referred_ratio)
+                                ai_inferred_val = max(0, total_sessions_val - ai_referred_val)
                                 
                             segment_rows.append({
                                 "tenant_id": self.tenant_id,
                                 "date": date_str,
                                 "source": "adobe-analytics",
                                 "medium": "organic-search",
-                                "total_sessions": int(float(r.get("sessions", 0))),
-                                "ai_referred_sessions": 0,
-                                "ai_inferred_sessions": 0,
+                                "total_sessions": total_sessions_val,
+                                "ai_referred_sessions": ai_referred_val,
+                                "ai_inferred_sessions": ai_inferred_val,
                                 "engagement_score": float(r.get("conversions", 0)),
                                 "company_id": chosen_company,
                                 "property_id": chosen_property,

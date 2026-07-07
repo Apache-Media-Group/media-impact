@@ -58,10 +58,12 @@ export const ChartWidget: React.FC<ChartWidgetProps> = ({
   };
 
   const renderChart = () => {
+    const chartKey = React.useId() + (data?.datasets?.[0]?.data?.length || 0);
+
     switch (type) {
-      case 'line': return <Line data={data} options={baseOptions} />;
-      case 'bar': return <Bar data={data} options={baseOptions} />;
-      case 'doughnut': return <Doughnut data={data} options={baseOptions} />;
+      case 'line': return <Line key={chartKey} data={data} options={baseOptions} />;
+      case 'bar': return <Bar key={chartKey} data={data} options={baseOptions} />;
+      case 'doughnut': return <Doughnut key={chartKey} data={data} options={baseOptions} />;
       default: return null;
     }
   };

@@ -25,7 +25,7 @@ if [ ! -f ".env" ]; then
 fi
 
 # Iniciar backend en segundo plano
-uvicorn main:app --host 127.0.0.1 --port 8080 > ../backend.log 2>&1 &
+uvicorn main:app --host 127.0.0.1 --port 8080 --env-file .env > ../backend.log 2>&1 &
 BACKEND_PID=$!
 echo "✅ Backend corriendo en http://localhost:8080 (PID: $BACKEND_PID)"
 

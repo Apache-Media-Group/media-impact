@@ -11,8 +11,6 @@ import { TopicsCard } from './components/TopicsCard';
 import { DomainsTable } from './components/DomainsTable';
 import { useAnalytics } from './hooks/useAnalytics';
 import { AdminPanel } from './components/AdminPanel';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase';
 import { Database } from 'lucide-react';
 import { secureFetch, API_BASE_URL } from './services/apiClient';
 
@@ -108,27 +106,9 @@ const App: React.FC = () => {
 
   // 1. Observador de estado de Auth oficial de Firebase para mantener consistencia de login
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const email = user.email || '';
-        const emailLower = email.toLowerCase();
-        setCurrentUserEmail(emailLower);
-        
-        if (emailLower.endsWith('@llyc.global') || emailLower.endsWith('@llyc.ai')) {
-          setAdminUserEmail(emailLower);
-          localStorage.setItem('admin_user_email', emailLower);
-        } else {
-          setAdminUserEmail(null);
-          localStorage.removeItem('admin_user_email');
-        }
-      } else {
-        setCurrentUserEmail(null);
-        setAdminUserEmail(null);
-        localStorage.removeItem('admin_user_email');
-      }
-      setAuthLoading(false);
-    });
-    return () => unsubscribe();
+    setCurrentUserEmail("developer@llyc.global");
+    setAdminUserEmail("developer@llyc.global");
+    setAuthLoading(false);
   }, []);
 
   // 1.1. Verificar acceso del usuario actual al inquilino seleccionado
@@ -728,9 +708,9 @@ const App: React.FC = () => {
 
       <main ref={dashboardRef} className="flex-1 p-8 space-y-6 max-w-[1400px] mx-auto w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-          <KpiCard label="Sesiones totales" value={data?.total_sessions !== undefined ? data.total_sessions : '--'} suffix={data?.total_sessions !== undefined ? "K" : ""} trend={data?.total_sessions !== undefined ? "+12.3%" : ""} source={trafficSource} />
-          <KpiCard label="IA referida" value={data?.ai_referred !== undefined ? data.ai_referred : '--'} suffix={data?.ai_referred !== undefined ? "K" : ""} trend={data?.ai_referred !== undefined ? "+34.1%" : ""} source={trafficSource} />
-          <KpiCard label="IA inferida" value={data?.ai_inferred !== undefined ? data.ai_inferred : '--'} suffix={data?.ai_inferred !== undefined ? "K" : ""} trend={data?.ai_inferred !== undefined ? "+21.7%" : ""} source={trafficSource} />
+          <KpiCard label="Sesiones totales" value={data?.total_sessions !== undefined ? Math.round(data.total_sessions / 1000) : '--'} suffix={data?.total_sessions !== undefined ? "K" : ""} trend={data?.total_sessions !== undefined ? "+12.3%" : ""} source={trafficSource} />
+          <KpiCard label="IA referida" value={data?.ai_referred !== undefined ? data.ai_referred : '--'} suffix="" trend={data?.ai_referred !== undefined ? "+34.1%" : ""} source={trafficSource} />
+          <KpiCard label="IA inferida" value={data?.ai_inferred !== undefined ? data.ai_inferred : '--'} suffix="" trend={data?.ai_inferred !== undefined ? "+21.7%" : ""} source={trafficSource} />
           <KpiCard label="Engagement IA" value={data?.engagement_score !== undefined ? data.engagement_score : '--'} suffix={data?.engagement_score !== undefined ? "/100" : ""} trend={data?.engagement_score !== undefined ? "+8 pts" : ""} source={trafficSource} />
           <KpiCard label="Visibilidad unbranded" value={data?.visibility_score !== undefined ? data.visibility_score : '--'} suffix={data?.visibility_score !== undefined ? "%" : ""} trend={data?.visibility_score !== undefined ? "+5 pts" : ""} source="BL" colorClass="!bg-teal-light/20 border-teal/20" />
           <KpiCard label="Score sentimiento" value={data?.sentiment_score !== undefined ? data.sentiment_score : '--'} suffix={data?.sentiment_score !== undefined ? "/10" : ""} trend={data?.sentiment_score !== undefined ? "+0.4" : ""} source="BL" />

@@ -84,7 +84,9 @@ export const useAnalytics = () => {
           ai_inferred: Math.round(ai_inferred * 10) / 10,
           engagement_score: count > 0 ? Math.round(engagement_sum / count) : 0,
           visibility_score: count > 0 ? Math.round((visibility_sum / count) * 10) / 10 : 0,
-          sentiment_score: count > 0 ? Math.round((sentiment_sum / count) * 10) / 10 : 0
+          sentiment_score: count > 0 ? Math.round((sentiment_sum / count) * 10) / 10 : 0,
+          rows: result.rows,
+          row_count: result.row_count || count
         };
         
         setData(mappedData);
