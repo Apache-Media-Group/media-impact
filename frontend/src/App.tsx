@@ -16,6 +16,8 @@ import { auth } from './firebase';
 import { Database } from 'lucide-react';
 import { secureFetch, API_BASE_URL } from './services/apiClient';
 
+// CI Trigger: Rebuild to inject new Firebase secrets
+
 interface TenantConfig {
   tenant_id: string;
   tenant_name: string;

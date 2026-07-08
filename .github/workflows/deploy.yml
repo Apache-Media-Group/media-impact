@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   # 🔍 JOB 1: Detectar cambios en Frontend y Backend
