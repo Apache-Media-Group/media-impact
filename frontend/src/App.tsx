@@ -464,7 +464,8 @@ const App: React.FC = () => {
             borderWidth: 1.5,
             borderDash: [4, 3],
             pointRadius: 0,
-            tension: 0.3
+            tension: 0.3,
+            yAxisID: 'y'
           },
           {
             label: 'Sesiones IA',
@@ -474,7 +475,8 @@ const App: React.FC = () => {
             pointRadius: 3,
             backgroundColor: 'rgba(245,73,99,0.05)',
             fill: true,
-            tension: 0.3
+            tension: 0.3,
+            yAxisID: 'y1'
           }
         ]
       });
@@ -757,6 +759,22 @@ const App: React.FC = () => {
               title="Evolución tráfico IA" 
               source={trafficSource} 
               data={lineData}
+              options={{
+                scales: {
+                  y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    grid: { color: 'rgba(0,0,0,0.05)' }
+                  },
+                  y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    grid: { drawOnChartArea: false }
+                  }
+                }
+              }}
               height={200}
               footer={
                 <div className="flex gap-4 text-[10px] font-bold uppercase tracking-widest text-mid">
@@ -795,7 +813,7 @@ const App: React.FC = () => {
           <div className="bg-white rounded-xl overflow-hidden border border-dashboard-border shadow-sm">
              <div className="p-5 pb-0">
                 <div className="text-[11px] font-bold text-navy uppercase tracking-widest mb-1 flex items-center gap-1">
-                  Rendimiento por motor IA <span className="text-[9px] px-1.5 py-0.5 rounded font-black bg-teal-light text-teal uppercase">GA4</span>
+                  Rendimiento por motor IA <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${trafficSource === 'Adobe' ? 'bg-navy/10 text-navy' : 'bg-teal-light text-teal'}`}>{trafficSource}</span>
                 </div>
                 <div className="text-[10px] text-mid mb-4">Sesiones · duración · conversión · score</div>
              </div>

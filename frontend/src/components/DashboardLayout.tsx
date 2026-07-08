@@ -95,6 +95,9 @@ export const FilterBar: React.FC<FilterBarProps> = ({
 }) => {
   const isAdobe = state.connection_id?.toLowerCase().includes('adobe');
 
+  const generalConnections = connections.filter(c => c.platform === 'GA4' || c.platform === 'ADOBE_ANALYTICS');
+  const aiConnections = connections.filter(c => c.platform === 'PEEC' || c.platform === 'BRANDLIGHT');
+
   return (
     <div className="bg-white border-b border-dashboard-border px-8 py-3 flex items-center gap-4 overflow-x-auto whitespace-nowrap custom-scrollbar">
       <div className="flex items-center gap-2">
@@ -117,18 +120,40 @@ export const FilterBar: React.FC<FilterBarProps> = ({
       
       <div className="h-4 w-[1px] bg-dashboard-border"></div>
 
-      {/* Orígenes / Conexiones */}
-      {connections.length > 0 && (
+      {/* Orígenes / Conexiones Generales */}
+      {generalConnections.length > 0 && (
         <>
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-bold text-mid uppercase tracking-widest">Origen</span>
+            <span className="text-[11px] font-bold text-mid uppercase tracking-widest">General Analytics</span>
             <select 
-              value={state.connection_id}
+              value={generalConnections.some(c => c.connection_id === state.connection_id) ? state.connection_id : ''}
               onChange={e => onConnectionChange?.(e.target.value)}
               className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 max-w-[150px] overflow-hidden text-ellipsis"
             >
               <option value="">Seleccionar Origen...</option>
-              {connections.map(c => (
+              {generalConnections.map(c => (
+                <option key={c.connection_id} value={c.connection_id}>
+                  {c.display_name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="h-4 w-[1px] bg-dashboard-border"></div>
+        </>
+      )}
+
+      {/* Orígenes / Conexiones AI */}
+      {aiConnections.length > 0 && (
+        <>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-bold text-mid uppercase tracking-widest">AI Analytics</span>
+            <select 
+              value={aiConnections.some(c => c.connection_id === state.connection_id) ? state.connection_id : ''}
+              onChange={e => onConnectionChange?.(e.target.value)}
+              className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 max-w-[150px] overflow-hidden text-ellipsis"
+            >
+              <option value="">Seleccionar Origen...</option>
+              {aiConnections.map(c => (
                 <option key={c.connection_id} value={c.connection_id}>
                   {c.display_name}
                 </option>
