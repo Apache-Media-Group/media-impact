@@ -257,9 +257,7 @@ const App: React.FC = () => {
 
   // Orígenes de datos, Cuentas, Propiedades y Segmentos
   const [connections, setConnections] = useState<any[]>([
-    { connection_id: 'local', display_name: 'Google Analytics 4 (Local/Demo)', platform: 'GA4' },
-    { connection_id: 'adobe-temp', display_name: 'Adobe Analytics (Test Sandbox)', platform: 'ADOBE_ANALYTICS' },
-    { connection_id: 'peec-temp', display_name: 'Peec.ai (Test Sandbox)', platform: 'PEEC' }
+    { connection_id: 'local', display_name: 'Google Analytics 4', platform: 'GA4' }
   ]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [properties, setProperties] = useState<any[]>([]);
@@ -274,15 +272,13 @@ const App: React.FC = () => {
         list.push({ connection_id: 'local', display_name: 'Google Analytics 4', platform: 'GA4' });
       }
       if (sec['adobe-creds']) {
-        list.push({ connection_id: 'adobe-temp', display_name: 'Adobe Analytics (GCP CRM)', platform: 'ADOBE_ANALYTICS' });
-      } else {
-        // Permitir de igual manera la conexión de pruebas para Adobe si no hay credenciales productivas
-        list.push({ connection_id: 'adobe-temp', display_name: 'Adobe Analytics (Test Sandbox)', platform: 'ADOBE_ANALYTICS' });
+        list.push({ connection_id: 'adobe-temp', display_name: 'Adobe Analytics', platform: 'ADOBE_ANALYTICS' });
       }
       if (sec['peec-key']) {
         list.push({ connection_id: 'peec-temp', display_name: 'Peec.ai (Comportamiento)', platform: 'PEEC' });
-      } else {
-        list.push({ connection_id: 'peec-temp', display_name: 'Peec.ai (Test Sandbox)', platform: 'PEEC' });
+      }
+      if (sec['brandlight-key']) {
+        list.push({ connection_id: 'brandlight-temp', display_name: 'Brandlight (Visibilidad)', platform: 'BRANDLIGHT' });
       }
       setConnections(list);
     }
