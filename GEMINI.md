@@ -67,7 +67,8 @@ El proceso de desarrollo, confirmación y empuje de cambios debe seguir estricta
   ```
 * *Nota: Si alguna de las compilaciones falla, se debe detener inmediatamente el proceso, depurar el error, resolverlo y reiniciar el protocolo obligatoriamente desde el Paso 1.*
 
-### Paso 3: Actualización de Documentación y Dependencias
+### Paso 3: Actualización de Documentación y Dependencias (Mandatorio)
+* Registrar y documentar detalladamente todo el trabajo técnico, los hitos arquitectónicos logrados, los errores resueltos y los resultados de las verificaciones en un archivo markdown estructurado dentro del directorio `developers_log/` siguiendo la convención de nomenclatura `YYYY-MM-DD-<tema-sprint>.md`.
 * Certificar que los `README.md`, Devlogs, diagramas o bitácoras de cambios del repositorio estén actualizados con los cambios del commit actual.
 * Si se agregaron librerías, asegurar que los archivos de dependencias (`package.json`, `requirements.txt`) estén modificados y agregados al commit de forma consistente.
 
@@ -90,7 +91,6 @@ El proceso de desarrollo, confirmación y empuje de cambios debe seguir estricta
   ```bash
   gh run watch
   ```
-* **Documentación Posterior al Despliegue (Mandatorio)**: Una vez que el despliegue del pipeline de GitHub Actions finalice exitosamente en verde, se debe proceder obligatoriamente a registrar y documentar detalladamente todo el trabajo técnico, los hitos arquitectónicos logrados, los errores resueltos y los resultados de las verificaciones en un archivo markdown estructurado dentro del directorio `developers_log/` siguiendo la convención de nomenclatura `YYYY-MM-DD-<tema-sprint>.md`.
 
 ---
 

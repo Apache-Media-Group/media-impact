@@ -259,7 +259,7 @@ class AdobeAnalyticsService(AnalyticsService):
             
             # Parameters to get all relevant segments
             params = {
-                "rsid": report_suite_id,
+                "rsids": report_suite_id,
                 "expansion": "definition,reportSuiteName,ownerFullName",
                 "includeType": "all",
                 "limit": 500  # Fetch up to 500 segments

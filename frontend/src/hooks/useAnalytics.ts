@@ -44,8 +44,7 @@ export const useAnalytics = () => {
           connection_id: currentState.connection_id,
           property_id: currentState.property_id,
           session_id: currentState.session_id,
-          start_date: currentState.from,
-          end_date: currentState.to,
+          date_ranges: [{ start_date: currentState.from, end_date: currentState.to }],
           market: currentState.market,
           segment_id: currentState.segment_id || undefined,
           tenant_id: currentState.tenant_id || undefined
