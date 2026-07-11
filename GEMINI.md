@@ -46,7 +46,14 @@ Bajo ninguna circunstancia se realizará un `git push` sin autorización previa 
 
 El proceso de desarrollo, confirmación y empuje de cambios debe seguir estrictamente este orden paso a paso:
 
-### Paso 1: Inspección de Estado y Diferencias
+### Paso 1: Lanzamiento del Entorno Local y Aprobación Visual
+* Ejecutar el entorno local para certificar que todos los servicios levantan sin errores de inicialización:
+  ```bash
+  ./test_local.sh
+  ```
+* Solicitar al usuario que ingrese a la interfaz gráfica (`localhost:3000`), inspeccione los últimos cambios de manera visual, y proporcione una confirmación explícita (visto bueno). **NO PROSEGUIR AL SIGUIENTE PASO HASTA RECIBIR CONFIRMACIÓN.**
+
+### Paso 2: Inspección de Estado y Diferencias
 * Ejecutar y analizar el estado actual del repositorio:
   ```bash
   git status
@@ -56,7 +63,7 @@ El proceso de desarrollo, confirmación y empuje de cambios debe seguir estricta
   git diff HEAD
   ```
 
-### Paso 2: Pruebas de Compilación (Filtro de Calidad)
+### Paso 3: Pruebas de Compilación (Filtro de Calidad)
 * **Frontend**: Compilar y validar que no existan errores de TypeScript ni fallos en el empaquetado:
   ```bash
   cd frontend && npm run build
@@ -67,12 +74,12 @@ El proceso de desarrollo, confirmación y empuje de cambios debe seguir estricta
   ```
 * *Nota: Si alguna de las compilaciones falla, se debe detener inmediatamente el proceso, depurar el error, resolverlo y reiniciar el protocolo obligatoriamente desde el Paso 1.*
 
-### Paso 3: Actualización de Documentación y Dependencias (Mandatorio)
+### Paso 4: Actualización de Documentación y Dependencias (Mandatorio)
 * Registrar y documentar detalladamente todo el trabajo técnico, los hitos arquitectónicos logrados, los errores resueltos y los resultados de las verificaciones en un archivo markdown estructurado dentro del directorio `developers_log/` siguiendo la convención de nomenclatura `YYYY-MM-DD-<tema-sprint>.md`.
 * Certificar que los `README.md`, Devlogs, diagramas o bitácoras de cambios del repositorio estén actualizados con los cambios del commit actual.
 * Si se agregaron librerías, asegurar que los archivos de dependencias (`package.json`, `requirements.txt`) estén modificados y agregados al commit de forma consistente.
 
-### Paso 4: Confirmación del Commit y Mensaje (Commit Stage)
+### Paso 5: Confirmación del Commit y Mensaje (Commit Stage)
 * Proponer al usuario una propuesta clara de mensaje de commit siguiendo el formato de **Conventional Commits**.
 * Solicitar confirmación del mensaje de commit.
 * Una vez confirmado, realizar la confirmación local agregando únicamente los archivos específicos:
@@ -81,7 +88,7 @@ El proceso de desarrollo, confirmación y empuje de cambios debe seguir estricta
   git commit -m "<mensaje_confirmado>"
   ```
 
-### Paso 5: Solicitud de Autorización de Push (Push Stage)
+### Paso 6: Solicitud de Autorización de Push (Push Stage)
 * Preguntar de manera directa y clara al usuario la confirmación para realizar el push a la rama remota.
 * **Solo tras recibir el "OK" o confirmación afirmativa del usuario**, proceder a ejecutar:
   ```bash
@@ -150,3 +157,10 @@ Cuando se trabaje con herramientas de **Google Cloud Platform (gcloud CLI)** o s
 * **Protección de Credenciales**: Está estrictamente prohibido comprometer archivos `.env`, tokens OAuth, API Keys (GA4, Adobe, Brandlight, Peec.ai) o claves JSON de GCP en el repositorio.
 * **GCP Secret Manager**: Toda credencial sensible en entornos remotos debe leerse directamente desde GCP Secret Manager en tiempo de ejecución.
 * **Validación de Commits**: No se añadirán al commit archivos temporales, logs (`*.log`), bases de datos locales (`*.db`), ni directorios de dependencias (`node_modules/`, `venv/`). Asegurar que estén cubiertos en el `.gitignore`.
+
+---
+
+## 📚 7. Documentación y Resolución de Dudas
+
+* **Directorio Obligatorio de Consulta**: Ante cualquier duda relacionada con la arquitectura, uso de la plataforma, integración de APIs, o resolución de problemas, se debe consultar **obligatoriamente** el contenido de la supracarpeta `/documentacion/` antes de ejecutar cambios en el código.
+* **Estructura Documental**: Esta carpeta contiene las metodologías, manuales de uso, guías de troubleshooting (incluyendo ejemplos de *requests*, *responses* y flujos de autenticación), documentación de arquitectura y objetivos del proyecto.
