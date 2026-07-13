@@ -20,6 +20,7 @@ class TenantConfigResponse(BaseModel):
     secondary_color: str
     font_family: str
     support_email: str
+    configured_secrets: Optional[dict] = None
 
 @router.get("/tenant/config", response_model=TenantConfigResponse)
 async def get_tenant_config(request: Request, tenant: Optional[str] = Query(None)):

@@ -4,6 +4,7 @@ export interface AnalyticsState {
   from: string;
   to: string;
   connection_id: string;
+  ai_connection_id?: string;
   property_id: string;
   session_id?: string;
   account_id?: string;

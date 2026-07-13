@@ -242,9 +242,9 @@ class AdobeAnalyticsService(AnalyticsService):
         if self.client_id == "adobe-temp":
             if self.tenant_id == "sanitas" or report_suite_id == "vrs_sanita2_sanitasmayores":
                 return [
-                    {"id": "s6582_694960ac62fb9877ebbada1f", "name": "Sanitas Seguros"},
-                    {"id": "s6582_69271f0350a78e73f6b47e5e", "name": "Sanitas Hospitales"},
-                    {"id": "s6582_69271ecb50a78e73f6b47e5c", "name": "Sanitas Dental"},
+                    {"id": "s6582_694960ac62fb9877ebbada1f", "name": "Mayores Sanitas SEM"},
+                    {"id": "s6582_69271f0350a78e73f6b47e5e", "name": "Biblioteca de salud 3ª Edad"},
+                    {"id": "s6582_69271ecb50a78e73f6b47e5c", "name": "Sanitas Mayores SEO"},
                     {"id": "all-users", "name": "Todos los usuarios"}
                 ]
             return [

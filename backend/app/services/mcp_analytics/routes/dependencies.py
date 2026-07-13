@@ -117,9 +117,11 @@ def get_analytics_service(
     if connection_id and user_email:
         target_user = user_email.lower().strip()
         
-        # Immediate fallback for presentation/mock connections without Firestore
         if connection_id == "peec-temp":
             return PeecService({"api_key": "peec-temp"})
+        elif connection_id == "brandlight-temp":
+            from app.services.mcp_analytics.brandlight_service import BrandlightService
+            return BrandlightService({"api_key": "brandlight-temp", "tenant_id": tenant_id})
         elif connection_id == "adobe-temp":
             return AdobeAnalyticsService({
                 "client_id": "adobe-temp",

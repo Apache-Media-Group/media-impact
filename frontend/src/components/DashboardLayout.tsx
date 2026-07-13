@@ -148,8 +148,8 @@ export const FilterBar: React.FC<FilterBarProps> = ({
           <div className="flex items-center gap-2">
             <span className="text-[11px] font-bold text-mid uppercase tracking-widest">AI Analytics</span>
             <select 
-              value={aiConnections.some(c => c.connection_id === state.connection_id) ? state.connection_id : ''}
-              onChange={e => onConnectionChange?.(e.target.value)}
+              value={aiConnections.some(c => c.connection_id === state.ai_connection_id) ? state.ai_connection_id : ''}
+              onChange={e => updateState({ ai_connection_id: e.target.value })}
               className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 max-w-[150px] overflow-hidden text-ellipsis"
             >
               <option value="">Seleccionar Origen...</option>

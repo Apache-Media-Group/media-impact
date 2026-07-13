@@ -232,14 +232,14 @@ const App: React.FC = () => {
           document.documentElement.style.setProperty('--teal-light', data.secondary_color + '1A');
         }
         
-        // Activar el modo de vista previa de administrador y forzar estados de conexión de simulación local
+        // Activar el modo de vista previa de administrador
         setAdminPreviewTenant(data.tenant_name);
         setIsAdminView(false);
         setShowDashboard(true);
         updateState({
           tenant_id: data.tenant_id,
-          connection_id: 'local',
-          property_id: 'bigquery-fact'
+          connection_id: '',
+          property_id: ''
         });
       }
     } catch (err) {
@@ -256,9 +256,7 @@ const App: React.FC = () => {
 
 
   // Orígenes de datos, Cuentas, Propiedades y Segmentos
-  const [connections, setConnections] = useState<any[]>([
-    { connection_id: 'local', display_name: 'Google Analytics 4', platform: 'GA4' }
-  ]);
+  const [connections, setConnections] = useState<any[]>([]);
   const [accounts, setAccounts] = useState<any[]>([]);
   const [properties, setProperties] = useState<any[]>([]);
   const [segments, setSegments] = useState<any[]>([]);
@@ -268,7 +266,7 @@ const App: React.FC = () => {
     if (tenant?.configured_secrets) {
       const list: any[] = [];
       const sec = tenant.configured_secrets;
-      if (sec['ga4-creds'] || true) { // Siempre dar la opción local de GA4 por defecto
+      if (sec['ga4-creds']) {
         list.push({ connection_id: 'local', display_name: 'Google Analytics 4', platform: 'GA4' });
       }
       if (sec['adobe-creds']) {
@@ -281,6 +279,30 @@ const App: React.FC = () => {
         list.push({ connection_id: 'brandlight-temp', display_name: 'Brandlight (Visibilidad)', platform: 'BRANDLIGHT' });
       }
       setConnections(list);
+      
+      // Auto-select the first valid general connection
+      const generalConnections = list.filter(c => c.platform === 'GA4' || c.platform === 'ADOBE_ANALYTICS');
+      if (generalConnections.length > 0) {
+        const currentConn = state.connection_id;
+        const hasCurrent = generalConnections.find(c => c.connection_id === currentConn);
+        if (!hasCurrent) {
+          setTimeout(() => {
+            handleConnectionChange(generalConnections[0].connection_id);
+          }, 0);
+        }
+      }
+
+      // Auto-select the first valid AI connection
+      const aiConns = list.filter(c => c.platform === 'PEEC' || c.platform === 'BRANDLIGHT');
+      if (aiConns.length > 0) {
+        const currentAi = state.ai_connection_id;
+        const hasCurrentAi = aiConns.find(c => c.connection_id === currentAi);
+        if (!hasCurrentAi) {
+          setTimeout(() => {
+            updateState({ ai_connection_id: aiConns[0].connection_id });
+          }, 0);
+        }
+      }
     }
   }, [tenant]);
 
@@ -728,7 +750,7 @@ const App: React.FC = () => {
 
       <main ref={dashboardRef} className="flex-1 p-8 space-y-6 max-w-[1400px] mx-auto w-full">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-          <KpiCard label="Sesiones totales" value={data?.total_sessions !== undefined ? Math.round(data.total_sessions / 1000) : '--'} suffix={data?.total_sessions !== undefined ? "K" : ""} trend={data?.total_sessions !== undefined ? "+12.3%" : ""} source={trafficSource} />
+          <KpiCard label="Sesiones totales" value={data?.total_sessions !== undefined ? data.total_sessions.toLocaleString('es-ES') : '--'} suffix="" trend={data?.total_sessions !== undefined ? "+12.3%" : ""} source={trafficSource} />
           <KpiCard label="IA referida" value={data?.ai_referred !== undefined ? data.ai_referred : '--'} suffix="" trend={data?.ai_referred !== undefined ? "+34.1%" : ""} source={trafficSource} />
           <KpiCard label="IA inferida" value={data?.ai_inferred !== undefined ? data.ai_inferred : '--'} suffix="" trend={data?.ai_inferred !== undefined ? "+21.7%" : ""} source={trafficSource} />
           <KpiCard label="Engagement IA" value={data?.engagement_score !== undefined ? data.engagement_score : '--'} suffix={data?.engagement_score !== undefined ? "/100" : ""} trend={data?.engagement_score !== undefined ? "+8 pts" : ""} source={trafficSource} />
