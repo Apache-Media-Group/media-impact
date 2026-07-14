@@ -164,3 +164,36 @@ Cuando se trabaje con herramientas de **Google Cloud Platform (gcloud CLI)** o s
 
 * **Directorio Obligatorio de Consulta**: Ante cualquier duda relacionada con la arquitectura, uso de la plataforma, integración de APIs, o resolución de problemas, se debe consultar **obligatoriamente** el contenido de la supracarpeta `/documentacion/` antes de ejecutar cambios en el código.
 * **Estructura Documental**: Esta carpeta contiene las metodologías, manuales de uso, guías de troubleshooting (incluyendo ejemplos de *requests*, *responses* y flujos de autenticación), documentación de arquitectura y objetivos del proyecto.
+
+---
+
+## 🏗️ 8. Protocolo de Integración con `llyc-ai-first-core`
+
+Este repositorio (`media_impact`) se utiliza como entorno de desarrollo iterativo. Sin embargo, el objetivo final es integrar este código dentro del monorepo principal `llyc-ai-first-core`.
+
+Para realizar esta integración de manera segura y alineada con los estándares del equipo, se debe ejecutar el siguiente protocolo estricto:
+
+### Paso 1: Preparación del Código (Limpieza)
+*   **Separación de Capas**: Asegurar una separación estricta entre la "Capa de Producto" (código genérico) y la "Capa de Cliente" (assets, configuraciones, logos de Sanitas). La capa de cliente **NO** debe migrarse al repositorio core.
+*   **Higiene**: Eliminar del código a portar los scripts *one-shot* o pruebas ad-hoc locales.
+
+### Paso 2: Brancheo en el Repositorio Core
+*   Clonar o actualizar localmente el repositorio `llyc-ai-first-core`.
+*   Crear una nueva rama a partir de `main` siguiendo la nomenclatura estándar (ej. `feature/media-impact-dashboard` o `fix/media-impact-auth`).
+
+### Paso 3: Transferencia y Adaptación (Porting)
+*   Copiar los archivos validados desde `media_impact` al directorio correspondiente dentro de `llyc-ai-first-core`.
+*   **Alineación de Infraestructura**: Respetar los invariantes del proyecto core:
+    *   Región de despliegue de GCP configurada a `europe-west1` (ej. en `cloudbuild.yaml`).
+    *   Inyección de secretos siempre desde Secret Manager (eliminar fallbacks *hardcodeados* como `SECRET_KEY`).
+    *   Políticas estrictas de CORS apuntando a los dominios de producción correctos (ej. `https://dashboard.llyc.global`).
+*   **Aislamiento**: Asegurar que las rutas (ej. routers de FastAPI) no colisionen con otros módulos como `campaign` o `sentiment`.
+
+### Paso 4: Testeo y Compilación en el Core
+*   Dentro del entorno de `llyc-ai-first-core`, ejecutar las pruebas de compilación mandatadas en el **Protocolo Pre-Push** (Frontend: `npm run build`, Backend: `python3 -m py_compile`).
+*   Verificar que no existan errores de dependencias o rutas superpuestas.
+
+### Paso 5: Commit, Push y Pull Request (PR)
+*   Realizar el commit en el repo core siguiendo las reglas de **Conventional Commits** y manteniendo la privacidad (sin nombrar clientes reales).
+*   Solicitar autorización al usuario para hacer el `git push` de la rama remota en el repo core.
+*   Una vez subida la rama, abrir un **Pull Request (PR)** en GitHub apuntando a `main` y solicitar la revisión formal del equipo.

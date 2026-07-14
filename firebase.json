@@ -54,14 +54,14 @@
         "source": "/media-impact/api/v1/**",
         "run": {
           "serviceId": "llyc-intelligence-api",
-          "region": "us-central1"
+          "region": "europe-west1"
         }
       },
       {
         "source": "/api/v1/**",
         "run": {
           "serviceId": "llyc-intelligence-api",
-          "region": "us-central1"
+          "region": "europe-west1"
         }
       },
       {

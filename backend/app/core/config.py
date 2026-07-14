@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     
     # Auth
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "super-secret-key-for-local-dev")
+    SECRET_KEY: str = os.getenv("SECRET_KEY")
     
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -14,9 +14,13 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="LLYC Intelligence Dashboard API")
 
 # Configure CORS
+# In production, this defaults to the strict domain. In local dev, we inject localhost via env vars.
+cors_origins_env = os.getenv("CORS_ALLOWED_ORIGINS", "https://dashboard.llyc.global")
+origins_list = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # In production, restrict this to your frontend URL
+    allow_origins=origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -25,6 +29,7 @@ app.add_middleware(
 # Import and include routers
 from app.services.mcp_analytics.endpoints import router as mcp_router
 
+# Mount MCP routes: /api/v1 for backwards compatibility, /media-impact/api/v1 to prevent collisions with other modules (e.g. 'campaign')
 app.include_router(mcp_router, prefix="/api/v1/mcp-analytics", tags=["MCP Analytics"])
 app.include_router(mcp_router, prefix="/media-impact/api/v1/mcp-analytics", tags=["MCP Analytics"])
 

@@ -28,6 +28,7 @@ class ConfigExecutor:
             
         action_str = action_str.lower()
         logger.info(f"⚙️ Intentando ejecutar acción técnica: {action_str}")
+        logger.info("Auto-applying internal override (does not touch client platforms)...")
         
         try:
             # Caso 1: Alias de métricas/dimensiones

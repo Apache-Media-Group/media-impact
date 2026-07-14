@@ -86,7 +86,7 @@ def create_or_update_tenant_scheduler(tenant_id: str):
         client = scheduler_v1.CloudSchedulerClient()
         
         project_id = os.getenv("GCP_PROJECT_ID") or "llyc-ai-first-core"
-        location_id = "us-central1"
+        location_id = "europe-west1"
         parent = f"projects/{project_id}/locations/{location_id}"
         
         job_id = f"mcp-analytics-{tenant_id}-etl-daily"

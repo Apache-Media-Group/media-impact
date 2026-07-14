@@ -51,10 +51,15 @@ pip install -r requirements.txt --quiet
 if [ ! -f ".env" ]; then
     echo "⚠️ ADVERTENCIA: No se encontró el archivo backend/.env"
     echo "Copiando plantilla base dinámica..."
-    printf "GCP_PROJECT_ID=$ACTIVE_PROJECT\nGOOGLE_CLOUD_PROJECT=$ACTIVE_PROJECT\nGEMINI_API_KEY=tu_api_key_aqui\n" > .env
+    printf "GCP_PROJECT_ID=$ACTIVE_PROJECT\nGOOGLE_CLOUD_PROJECT=$ACTIVE_PROJECT\nGEMINI_API_KEY=tu_api_key_aqui\nCORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173\n" > .env
 else
     # Restaurar la configuración de credenciales a la Service Account de pruebas si estaba comentada
     sed -i '' 's/^#GOOGLE_APPLICATION_CREDENTIALS=/GOOGLE_APPLICATION_CREDENTIALS=/g' .env 2>/dev/null || true
+    
+    # Asegurar que CORS_ALLOWED_ORIGINS esté configurado para el entorno local
+    if ! grep -q "CORS_ALLOWED_ORIGINS" .env; then
+        echo "CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173" >> .env
+    fi
 fi
 
 # Iniciar backend en segundo plano

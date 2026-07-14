@@ -78,7 +78,7 @@ jobs:
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: llyc-intelligence-api
-          region: us-central1
+          region: europe-west1
           source: backend
           env_vars: |
             GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
