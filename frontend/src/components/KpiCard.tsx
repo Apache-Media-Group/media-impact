@@ -9,6 +9,7 @@ interface KpiCardProps {
   isPositive?: boolean;
   source?: string;
   colorClass?: string;
+  tooltip?: string;
 }
 
 export const KpiCard: React.FC<KpiCardProps> = ({ 
@@ -18,7 +19,8 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   trend, 
   isPositive = true, 
   source,
-  colorClass = ""
+  colorClass = "",
+  tooltip
 }) => {
   const valueStr = String(value);
   const isVeryLongValue = valueStr.length > 7;
@@ -27,7 +29,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   const valueSizeClass = isVeryLongValue ? 'text-xl xl:text-2xl' : isLongValue ? 'text-2xl xl:text-3xl' : 'text-3xl';
 
   return (
-    <div className={`bg-white rounded-xl p-4 border border-dashboard-border shadow-sm flex flex-col gap-1.5 min-w-0 h-full ${colorClass}`}>
+    <div className={`bg-white rounded-xl p-4 border border-dashboard-border shadow-sm flex flex-col gap-1.5 min-w-0 h-full ${colorClass}`} title={tooltip}>
       <div className="flex items-start justify-between min-w-0">
         <div className="text-[10px] xl:text-[11px] font-bold text-mid uppercase tracking-widest flex items-start gap-1 flex-wrap">
           <span className="leading-tight break-words">{label}</span>
