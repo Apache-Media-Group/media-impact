@@ -4,13 +4,15 @@
 
 En respuesta al reporte de QA (Olga García):
 1. **Engagement IA a 0:** Se detectó un problema en el frontend (`useAnalytics.ts`) donde el `engagement_score` promedio se estaba diluyendo significativamente al promediarse usando la longitud total de los días reportados (`count`), incluyendo aquellos días en los que no había tráfico IA (`engagement_score = 0`). Se modificó la lógica para que el promedio se calcule únicamente sobre los días válidos que reportan un score mayor a 0 (`valid_engagement_days`). Esto soluciona el issue de que el Engagement Score apareciera como "0".
-2. **Leyenda de KPIs:** Se introdujo la funcionalidad de tooltips nativos (`title`) en el componente `KpiCard` para proporcionar contexto adicional al pasar el cursor. En `App.tsx` se documentó extensamente cada KPI para resolver confusiones, como la diferencia conceptual de "Sesiones totales" frente al tráfico de IA.
+2. **Leyenda de KPIs:** Se introdujo la funcionalidad de tooltips mediante un icono interactivo (`Info` de lucide-react) en el componente `KpiCard` para proporcionar contexto adicional al pasar el cursor. En `App.tsx` se documentó extensamente cada KPI para resolver confusiones, como la diferencia conceptual de "Sesiones totales" frente al tráfico de IA.
+3. **Resolución de Error React Hydration:** Se corrigió un error visual detectado durante las pruebas locales: `Failed to execute 'removeChild' on 'Node'`. Este error era provocado por intentar anidar un elemento contenedor en bloque (`div`) dentro de un elemento en línea (`span`) en el nuevo renderizado del tooltip. Se reestructuró el HTML en `KpiCard.tsx` utilizando contenedores `div` apropiados.
 
 ## Archivos Modificados
-- `frontend/src/components/KpiCard.tsx` (agregada prop `tooltip` y su renderizado).
+- `frontend/src/components/KpiCard.tsx` (agregada prop `tooltip` y rediseño interactivo con icono de info y contenedor flotante).
 - `frontend/src/App.tsx` (se pasaron los textos explicativos para cada tarjeta de KPI).
 - `frontend/src/hooks/useAnalytics.ts` (se reescribió la lógica de agregación de `engagement_sum` y `valid_engagement_days`).
 
 ## Resultados de Pruebas
 - Compilación del frontend exitosa (`npm run build`).
-- Se validaron los tooltips en inspección de código.
+- Se validó visualmente en el entorno local (localhost:3000) el renderizado sin fallos de React DOM.
+- Tooltips funcionando correctamente al posar el cursor sobre los iconos de información.
