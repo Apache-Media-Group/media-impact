@@ -49,6 +49,12 @@ class GCSService:
             # Subir contenido con el content_type correcto
             blob.upload_from_string(file_content, content_type=content_type)
             
+            # Hacer público el archivo para que se pueda visualizar en la interfaz web (<img> tag)
+            try:
+                blob.make_public()
+            except Exception as e:
+                logger.warning(f"No se pudo hacer público el logo (posible Uniform Bucket-Level Access): {e}")
+                
             # Generar URL pública CDN estándar de Google Cloud Storage
             public_url = f"https://storage.googleapis.com/{self.bucket_name}/{blob_name}"
             logger.info(f"✅ Logotipo de tenant '{tenant_id}' subido con éxito a GCS: {public_url}")

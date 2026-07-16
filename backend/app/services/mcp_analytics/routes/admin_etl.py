@@ -585,7 +585,7 @@ async def upload_tenant_logo_admin(
         # Si Firestore está disponible, actualizar de forma automática el logo_url del tenant
         tm = TokenManager()
         if tm.db:
-            tm.db.collection("tenants").document(tenant_id_clean).update({"logo_url": public_url})
+            tm.db.collection("tenants").document(tenant_id_clean).set({"logo_url": public_url}, merge=True)
             logger.info(f"Firestore actualizado con la nueva logo_url de GCS para el tenant '{tenant_id_clean}'.")
             
         return {
