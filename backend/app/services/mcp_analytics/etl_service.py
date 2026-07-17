@@ -191,34 +191,95 @@ class MCPETLService:
                         pass
 
                 ga_service = GAService(credentials=parsed_creds)
-                req = RunReportRequest(
-                    property_id=ga4_property_id,
-                    date_ranges=[{"start_date": date_from, "end_date": date_to}],
-                    dimensions=["date"],
-                    metrics=["activeUsers", "sessions", "conversions"],
-                    limit=10000
-                )
-                res = await ga_service.run_report(req)
-                for r in res.rows:
-                    key = f"{ga4_property_id}_all-users_{self._clean_date_format(r.get('date'))}"
+                
+                limit = 10000
+                offset = 0
+                all_rows = []
+                
+                while True:
+                    req = RunReportRequest(
+                        property_id=ga4_property_id,
+                        date_ranges=[{"start_date": date_from, "end_date": date_to}],
+                        dimensions=["date", "sessionSource"],
+                        metrics=["activeUsers", "sessions", "conversions", "averageSessionDuration"],
+                        limit=limit,
+                        offset=offset
+                    )
+                    res = await ga_service.run_report(req)
+                    if res and res.rows:
+                        all_rows.extend(res.rows)
+                    if not res or not res.rows or len(res.rows) < limit:
+                        break
+                    offset += limit
+
+                for r in all_rows:
+                    date_val = self._clean_date_format(r.get("date"))
+                    source_val = r.get("sessionSource", "").lower()
+                    sessions_val = int(float(r.get("sessions", 0)))
+                    conversions_val = float(r.get("conversions", 0))
+                    avg_duration = float(r.get("averageSessionDuration", 0))
+                    total_duration_val = sessions_val * avg_duration
+                    
+                    is_chatgpt = "chatgpt" in source_val or "openai" in source_val
+                    is_gemini = "gemini" in source_val or "google bard" in source_val or "android-app://com.google.android.apps.bard" in source_val
+                    is_perplexity = "perplexity" in source_val
+                    is_claude = "claude" in source_val or "anthropic" in source_val
+                    is_copilot = "copilot" in source_val or "bing ai" in source_val
+                    is_other_ai = (not (is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot)) and ("ai" in source_val or "bot" in source_val)
+                    is_referred = is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot or is_other_ai
+                    
+                    key = f"{ga4_property_id}_all-users_{date_val}"
                     if key not in merged_traffic:
                         merged_traffic[key] = {
                             "tenant_id": self.tenant_id,
-                            "date": self._clean_date_format(r.get("date")),
+                            "date": date_val,
                             "source": "all",
                             "medium": "all",
                             "total_sessions": 0,
                             "ai_referred_sessions": 0,
                             "ai_inferred_sessions": 0,
+                            "chatgpt_sessions": 0,
+                            "chatgpt_duration": 0.0,
+                            "gemini_sessions": 0,
+                            "gemini_duration": 0.0,
+                            "perplexity_sessions": 0,
+                            "perplexity_duration": 0.0,
+                            "claude_sessions": 0,
+                            "claude_duration": 0.0,
+                            "copilot_sessions": 0,
+                            "copilot_duration": 0.0,
+                            "other_ai_sessions": 0,
+                            "other_ai_duration": 0.0,
                             "engagement_score": 0.0,
                             "company_id": "ga4-account",
                             "property_id": ga4_property_id,
                             "segment_id": "all-users"
                         }
-                    merged_traffic[key]["total_sessions"] += int(float(r.get("sessions", 0)))
-                    merged_traffic[key]["engagement_score"] = float(r.get("conversions", 0))
+                    merged_traffic[key]["total_sessions"] += sessions_val
+                    merged_traffic[key]["engagement_score"] += conversions_val
+                    
+                    if is_referred:
+                        merged_traffic[key]["ai_referred_sessions"] += sessions_val
+                    if is_chatgpt:
+                        merged_traffic[key]["chatgpt_sessions"] += sessions_val
+                        merged_traffic[key]["chatgpt_duration"] += total_duration_val
+                    elif is_gemini:
+                        merged_traffic[key]["gemini_sessions"] += sessions_val
+                        merged_traffic[key]["gemini_duration"] += total_duration_val
+                    elif is_perplexity:
+                        merged_traffic[key]["perplexity_sessions"] += sessions_val
+                        merged_traffic[key]["perplexity_duration"] += total_duration_val
+                    elif is_claude:
+                        merged_traffic[key]["claude_sessions"] += sessions_val
+                        merged_traffic[key]["claude_duration"] += total_duration_val
+                    elif is_copilot:
+                        merged_traffic[key]["copilot_sessions"] += sessions_val
+                        merged_traffic[key]["copilot_duration"] += total_duration_val
+                    elif is_other_ai:
+                        merged_traffic[key]["other_ai_sessions"] += sessions_val
+                        merged_traffic[key]["other_ai_duration"] += total_duration_val
 
-                results["ga4"] = f"success ({len(res.rows)} filas)"
+                results["ga4"] = f"success ({len(all_rows)} filas)"
             except Exception as e:
                 logger.error(f"Error en extracción de GA4: {e}")
                 results["ga4"] = f"error: {str(e)}"
@@ -320,6 +381,18 @@ class MCPETLService:
                                 "total_sessions": total_sessions_val,
                                 "ai_referred_sessions": ai_referred_val,
                                 "ai_inferred_sessions": ai_inferred_val,
+                                "chatgpt_sessions": 0,
+                                "chatgpt_duration": 0.0,
+                                "gemini_sessions": 0,
+                                "gemini_duration": 0.0,
+                                "perplexity_sessions": 0,
+                                "perplexity_duration": 0.0,
+                                "claude_sessions": 0,
+                                "claude_duration": 0.0,
+                                "copilot_sessions": 0,
+                                "copilot_duration": 0.0,
+                                "other_ai_sessions": 0,
+                                "other_ai_duration": 0.0,
                                 "engagement_score": float(r.get("conversions", 0)),
                                 "company_id": chosen_company,
                                 "property_id": chosen_property,

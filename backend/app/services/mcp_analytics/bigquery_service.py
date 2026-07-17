@@ -59,9 +59,18 @@ class BigQueryService:
                     bigquery.SchemaField("date", "DATE", mode="REQUIRED"),
                     bigquery.SchemaField("source", "STRING", mode="NULLABLE"),
                     bigquery.SchemaField("medium", "STRING", mode="NULLABLE"),
-                    bigquery.SchemaField("total_sessions", "INTEGER", mode="NULLABLE"),
-                    bigquery.SchemaField("ai_referred_sessions", "INTEGER", mode="NULLABLE"),
-                    bigquery.SchemaField("ai_inferred_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("chatgpt_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("chatgpt_duration", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("gemini_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("gemini_duration", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("perplexity_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("perplexity_duration", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("claude_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("claude_duration", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("copilot_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("copilot_duration", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("other_ai_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("other_ai_duration", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("engagement_score", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("company_id", "STRING", mode="NULLABLE"),
                     bigquery.SchemaField("property_id", "STRING", mode="NULLABLE"),
@@ -291,8 +300,9 @@ class BigQueryService:
             return {}
 
         try:
-            # Filtro opcional de segmento
-            segment_filter = "AND segment_id = @segment_id" if segment_id else ""
+            # Filtro de segmento por defecto para no duplicar datos (all-users + segmentos)
+            target_segment = segment_id if segment_id else "all-users"
+            segment_filter = "AND segment_id = @segment_id"
             
             # 1. Query para Tráfico diario (fact_traffic_evolution)
             query_traffic = f"""
@@ -301,6 +311,18 @@ class BigQueryService:
                     SUM(total_sessions) as total_sessions,
                     SUM(ai_referred_sessions) as ai_referred,
                     SUM(ai_inferred_sessions) as ai_inferred,
+                    SUM(chatgpt_sessions) as chatgpt_sessions,
+                    SUM(chatgpt_duration) as chatgpt_duration,
+                    SUM(gemini_sessions) as gemini_sessions,
+                    SUM(gemini_duration) as gemini_duration,
+                    SUM(perplexity_sessions) as perplexity_sessions,
+                    SUM(perplexity_duration) as perplexity_duration,
+                    SUM(claude_sessions) as claude_sessions,
+                    SUM(claude_duration) as claude_duration,
+                    SUM(copilot_sessions) as copilot_sessions,
+                    SUM(copilot_duration) as copilot_duration,
+                    SUM(other_ai_sessions) as other_ai_sessions,
+                    SUM(other_ai_duration) as other_ai_duration,
                     AVG(engagement_score) as engagement_score
                 FROM `{self.project_id}.{self.dataset_id}.fact_traffic_evolution`
                 WHERE tenant_id = @tenant_id 
@@ -319,14 +341,12 @@ class BigQueryService:
                 WHERE tenant_id = @tenant_id 
                   AND date BETWEEN @start_date AND @end_date
             """
-            
             params = [
                 bigquery.ScalarQueryParameter("tenant_id", "STRING", tenant_id),
                 bigquery.ScalarQueryParameter("start_date", "STRING", start_date),
                 bigquery.ScalarQueryParameter("end_date", "STRING", end_date),
+                bigquery.ScalarQueryParameter("segment_id", "STRING", target_segment)
             ]
-            if segment_id:
-                params.append(bigquery.ScalarQueryParameter("segment_id", "STRING", segment_id))
                 
             job_config = bigquery.QueryJobConfig(query_parameters=params)
             
@@ -368,6 +388,18 @@ class BigQueryService:
                         "sessions": row_sessions,
                         "ai_referred": row_referred,
                         "ai_inferred": row_inferred,
+                        "chatgpt_sessions": row.chatgpt_sessions or 0,
+                        "chatgpt_duration": row.chatgpt_duration or 0.0,
+                        "gemini_sessions": row.gemini_sessions or 0,
+                        "gemini_duration": row.gemini_duration or 0.0,
+                        "perplexity_sessions": row.perplexity_sessions or 0,
+                        "perplexity_duration": row.perplexity_duration or 0.0,
+                        "claude_sessions": row.claude_sessions or 0,
+                        "claude_duration": row.claude_duration or 0.0,
+                        "copilot_sessions": row.copilot_sessions or 0,
+                        "copilot_duration": row.copilot_duration or 0.0,
+                        "other_ai_sessions": row.other_ai_sessions or 0,
+                        "other_ai_duration": row.other_ai_duration or 0.0,
                         "engagement_score": round(row_eng, 1)
                     })
                     metrics["has_data"] = True
