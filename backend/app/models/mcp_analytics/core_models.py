@@ -41,7 +41,7 @@ class GAProperty(BaseModel):
 
 class RunReportRequest(BaseModel):
     """Request para ejecutar un reporte GA4."""
-    property_id: str = Field(..., description="ID de la propiedad GA4 (formato: properties/XXXXX)")
+    property_id: Optional[str] = Field(None, description="ID de la propiedad GA4 (formato: properties/XXXXX)")
     date_ranges: List[Dict[str, str]] = Field(
         default=[{"start_date": "7daysAgo", "end_date": "today"}],
         description="Rangos de fechas (formato GA4: YYYY-MM-DD o NdaysAgo)"
@@ -58,6 +58,7 @@ class RunReportRequest(BaseModel):
     offset: int = Field(default=0, ge=0, description="Offset para paginación")
     session_id: Optional[str] = None
     connection_id: Optional[str] = None
+    live_api: bool = False
     segment_id: Optional[str] = None
     tenant_id: Optional[str] = None
 

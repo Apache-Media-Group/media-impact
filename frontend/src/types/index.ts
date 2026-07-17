@@ -10,6 +10,7 @@ export interface AnalyticsState {
   account_id?: string;
   segment_id?: string;
   tenant_id?: string;
+  live_api?: boolean;
 }
 
 export interface ApiResponse {

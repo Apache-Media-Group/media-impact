@@ -123,7 +123,7 @@ class PeecService(AnalyticsService):
         Tries to fetch real metrics from Peec.ai endpoints and integrates them.
         Generates realistic/accurate fallbacks that conform to LLYC's required schemas.
         """
-        property_id = request.property_id.split("/")[-1]
+        property_id = request.property_id.split("/")[-1] if request.property_id else "peec-proj-1"
         dim_headers = request.dimensions
         met_headers = request.metrics
 
@@ -215,7 +215,7 @@ class PeecService(AnalyticsService):
             rows.append(row_data)
 
         return RunReportResponse(
-            property_id=request.property_id,
+            property_id=property_id,
             dimension_headers=dim_headers,
             metric_headers=met_headers,
             rows=rows,

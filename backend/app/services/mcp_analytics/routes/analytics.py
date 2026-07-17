@@ -200,8 +200,8 @@ async def run_report(
     if t_id:
         await verify_tenant_access(t_id, user_email, enforce_2fa=True)
     
-    # Si se pasa un tenant_id, intentar recuperar datos consolidados reales desde BigQuery
-    if t_id:
+    # Si se pasa un tenant_id y no estamos en modo live_api, intentar recuperar datos reales desde BigQuery
+    if t_id and not request.live_api:
         try:
             from app.services.mcp_analytics.bigquery_service import BigQueryService
             bq = BigQueryService()
@@ -260,9 +260,16 @@ async def run_report(
         except Exception as bqe:
             logger.warning(f"No se pudo consultar BigQuery para {t_id}, procediendo con fallback tradicional: {bqe}")
 
-    service = get_analytics_service(s_id, c_id, user_email)
-    result = await service.run_report(request)
-    return result
+    try:
+        service = get_analytics_service(s_id, c_id, user_email)
+        result = await service.run_report(request)
+        return result
+    except Exception as e:
+        logger.error(f"Error fetching live API report for tenant {t_id}: {e}", exc_info=True)
+        if request.live_api:
+            # Si estamos explícitamente en modo Live API y falla, devolver un error claro
+            raise HTTPException(status_code=500, detail=f"Error en Live API: {str(e)}")
+        raise e
 
 @router.post("/advanced-report")
 async def execute_advanced_report(

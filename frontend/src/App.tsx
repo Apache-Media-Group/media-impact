@@ -239,11 +239,45 @@ const App: React.FC = () => {
         updateState({
           tenant_id: data.tenant_id,
           connection_id: '',
-          property_id: ''
+          property_id: '',
+          live_api: false
         });
       }
     } catch (err) {
       console.error("Error setting preview tenant:", err);
+    }
+  };
+
+  const handlePreviewLiveAPI = async (tenantId: string) => {
+    try {
+      const res = await secureFetch(`/api/v1/mcp-analytics/tenant/config?tenant=${tenantId}`);
+      if (res.ok) {
+        const data: TenantConfig = await res.json();
+        setTenant(data);
+        
+        // Aplicar la paleta de colores de marca dinámicamente en el documento
+        if (data.primary_color) {
+          document.documentElement.style.setProperty('--red', data.primary_color);
+          document.documentElement.style.setProperty('--red-light', data.primary_color + '1A');
+        }
+        if (data.secondary_color) {
+          document.documentElement.style.setProperty('--teal', data.secondary_color);
+          document.documentElement.style.setProperty('--teal-light', data.secondary_color + '1A');
+        }
+        
+        // Activar el modo de vista previa de administrador y LIVE API
+        setAdminPreviewTenant(data.tenant_name + " (LIVE API DEMO)");
+        setIsAdminView(false);
+        setShowDashboard(true);
+        updateState({
+          tenant_id: data.tenant_id,
+          connection_id: '',
+          property_id: '',
+          live_api: true
+        });
+      }
+    } catch (err) {
+      console.error("Error setting preview tenant (Live API):", err);
     }
   };
 
@@ -600,7 +634,7 @@ const App: React.FC = () => {
   };
 
   if (isAdminView) {
-    return <AdminPanel adminEmailProp={adminUserEmail || undefined} onBack={handleGoToDashboard} onPreviewTenant={handlePreviewTenant} />;
+    return <AdminPanel adminEmailProp={adminUserEmail || undefined} onBack={handleGoToDashboard} onPreviewTenant={handlePreviewTenant} onPreviewLiveAPI={handlePreviewLiveAPI} />;
   }
 
   if (!showDashboard) {

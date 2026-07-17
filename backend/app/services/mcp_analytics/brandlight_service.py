@@ -208,7 +208,7 @@ class BrandlightService(AnalyticsService):
         except Exception as e:
             logger.warning(f"Error al verificar marca de Brandlight: {e}")
                 
-        location = request.property_id.split("/")[-1] # ej: ES, MX
+        location = request.property_id.split("/")[-1] if request.property_id else "ES" # ej: ES, MX
         
         # Parseo de fechas GA4 a YYYY-MM-DD
         date_range = request.date_ranges[0] if request.date_ranges else {"start_date": "30daysAgo", "end_date": "today"}
@@ -272,7 +272,7 @@ class BrandlightService(AnalyticsService):
             raise e
         
         return RunReportResponse(
-            property_id=request.property_id,
+            property_id=location,
             dimension_headers=request.dimensions,
             metric_headers=request.metrics,
             rows=rows,

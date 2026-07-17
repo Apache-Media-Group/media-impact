@@ -202,7 +202,7 @@ class GAService(AnalyticsService):
         """
         if self.is_local:
             return RunReportResponse(
-                property_id=request.property_id,
+                property_id=request.property_id or "",
                 dimension_headers=request.dimensions,
                 metric_headers=request.metrics,
                 rows=[],
@@ -266,7 +266,7 @@ class GAService(AnalyticsService):
             rows.append(row_data)
 
         return RunReportResponse(
-            property_id=request.property_id,
+            property_id=request.property_id or "",
             dimension_headers=dimension_headers,
             metric_headers=metric_headers,
             rows=rows,

@@ -47,7 +47,8 @@ export const useAnalytics = () => {
           date_ranges: [{ start_date: currentState.from, end_date: currentState.to }],
           market: currentState.market,
           segment_id: currentState.segment_id || undefined,
-          tenant_id: currentState.tenant_id || undefined
+          tenant_id: currentState.tenant_id || undefined,
+          live_api: currentState.live_api || undefined
         })
       });
 

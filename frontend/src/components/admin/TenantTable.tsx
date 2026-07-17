@@ -7,6 +7,7 @@ interface TenantTableProps {
   tenants: TenantConfig[];
   loading: boolean;
   onPreviewTenant?: (tenantId: string) => void;
+  onPreviewLiveAPI?: (tenantId: string) => void;
   openAuditModal: (tenantId: string) => void;
   openSecretModal: (tenantId: string) => void;
   openEditModal: (tenant: TenantConfig) => void;
@@ -16,6 +17,7 @@ export const TenantTable: React.FC<TenantTableProps> = ({
   tenants,
   loading,
   onPreviewTenant,
+  onPreviewLiveAPI,
   openAuditModal,
   openSecretModal,
   openEditModal,
@@ -105,6 +107,15 @@ export const TenantTable: React.FC<TenantTableProps> = ({
                     className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
                   >
                     👁️ Ver Dashboard
+                  </button>
+                )}
+                {onPreviewLiveAPI && (
+                  <button
+                    onClick={() => onPreviewLiveAPI(t.tenant_id)}
+                    title="Carga los datos directamente desde las APIs (Bypasses BigQuery)"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
+                  >
+                    🚀 LIVE API (DEMO)
                   </button>
                 )}
                 <button
