@@ -23,10 +23,10 @@ export const KpiCard: React.FC<KpiCardProps> = ({
   tooltip
 }) => {
   const valueStr = String(value);
-  const isVeryLongValue = valueStr.length > 7;
-  const isLongValue = valueStr.length > 5;
+  const isVeryLongValue = valueStr.length >= 7;
+  const isLongValue = valueStr.length >= 5;
   
-  const valueSizeClass = isVeryLongValue ? 'text-xl xl:text-2xl' : isLongValue ? 'text-2xl xl:text-3xl' : 'text-3xl';
+  const valueSizeClass = isVeryLongValue ? 'text-lg xl:text-xl tracking-tighter' : isLongValue ? 'text-xl xl:text-2xl tracking-tight' : 'text-3xl';
 
   return (
     <div className={`bg-white rounded-xl p-4 border border-dashboard-border shadow-sm flex flex-col gap-1.5 min-w-0 h-full ${colorClass}`}>
@@ -52,7 +52,7 @@ export const KpiCard: React.FC<KpiCardProps> = ({
       </div>
       
       <div className={`${valueSizeClass} font-black text-navy flex items-baseline gap-1 min-w-0 mt-1`}>
-        <span className="break-all leading-none">{value}</span>
+        <span className="whitespace-nowrap leading-none">{value}</span>
         {suffix ? <em className="text-xs xl:text-sm font-normal not-italic text-mid flex-shrink-0">{suffix}</em> : null}
       </div>
       

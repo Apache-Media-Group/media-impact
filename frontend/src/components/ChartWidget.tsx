@@ -30,7 +30,7 @@ ChartJS.register(
 interface ChartWidgetProps {
   type: 'line' | 'bar' | 'doughnut';
   title: string;
-  source?: 'GA4' | 'BL' | 'Adobe';
+  source?: string;
   data: any;
   options?: any;
   height?: number;
@@ -57,8 +57,10 @@ export const ChartWidget: React.FC<ChartWidgetProps> = ({
     ...options
   };
 
+  const chartId = React.useId();
+
   const renderChart = () => {
-    const chartKey = React.useId() + (data?.datasets?.[0]?.data?.length || 0);
+    const chartKey = chartId + (data?.datasets?.[0]?.data?.length || 0);
 
     switch (type) {
       case 'line': return <Line key={chartKey} data={data} options={baseOptions} />;

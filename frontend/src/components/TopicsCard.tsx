@@ -8,7 +8,7 @@ interface Topic {
 interface TopicsCardProps {
   title: string;
   topics: Topic[];
-  source?: 'GA4' | 'BL';
+  source?: string;
 }
 
 export const TopicsCard: React.FC<TopicsCardProps> = ({ title, topics, source }) => {

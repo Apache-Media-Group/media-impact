@@ -9,7 +9,7 @@ interface Row {
 interface DomainsTableProps {
   title: string;
   rows: Row[];
-  source?: 'GA4' | 'BL';
+  source?: string;
 }
 
 export const DomainsTable: React.FC<DomainsTableProps> = ({ title, rows, source }) => {
