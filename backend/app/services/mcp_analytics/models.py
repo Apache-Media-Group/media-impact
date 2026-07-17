@@ -60,6 +60,7 @@ class RunReportRequest(BaseModel):
     connection_id: Optional[str] = None
     segment_id: Optional[str] = None
     tenant_id: Optional[str] = None
+    live_api: Optional[bool] = False
 
 
 class RunReportResponse(BaseModel):

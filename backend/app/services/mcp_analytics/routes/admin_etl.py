@@ -1,5 +1,6 @@
 # backend/app/services/mcp_analytics/routes/admin_etl.py
 import os
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
@@ -42,6 +43,10 @@ class AdobeValidationRequest(BaseModel):
     client_id: str
     client_secret: str
     org_id: str
+
+class GA4MultiPropertyRequest(BaseModel):
+    connection_id: str
+    properties: List[str]
 
 class GA4ValidationRequest(BaseModel):
     credentials_json: str
@@ -799,4 +804,62 @@ async def patch_tenant_data_gaps_admin(
         
     except Exception as e:
         logger.error(f"Error al parchar datos del tenant {tenant_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/admin/tenants/{tenant_id}/ga4-config", response_model=Dict[str, Any])
+async def configure_ga4_multi_property_admin(
+    tenant_id: str,
+    req: GA4MultiPropertyRequest,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Configura de forma encriptada una conexión GA4 (basada en Service Account) y 
+    asocia las múltiples propiedades a este tenant en Firestore y Secret Manager.
+    """
+    try:
+        connection_id = req.connection_id
+        properties = req.properties
+        
+        if not connection_id or not properties:
+            raise HTTPException(status_code=400, detail="Debe proporcionar el connection_id y al menos una propiedad.")
+            
+        tenant_id_clean = tenant_id.lower().strip()
+        
+        # 1. Recuperar el secreto de la conexión global
+        sms = SecretManagerService()
+        global_secret = sms.get_tenant_secret("global", f"ga4-conn-{connection_id}")
+        if not global_secret:
+            raise HTTPException(status_code=404, detail="La conexión global de GA4 seleccionada no existe.")
+            
+        # 2. Re-encriptar la estructura completa en el tenant
+        tenant_ga4_secret = {
+            "connection_id": connection_id,
+            "credentials_json": global_secret,
+            "properties": properties
+        }
+        
+        # Guardar en secret manager del tenant
+        sms.save_tenant_secret(
+            tenant_id=tenant_id_clean,
+            secret_type="ga4-creds",
+            secret_value=json.dumps(tenant_ga4_secret)
+        )
+        
+        # 3. Actualizar Firestore
+        tm = TokenManager()
+        if tm.db:
+            tm.db.collection("tenants").document(tenant_id_clean).set({
+                "configured_secrets": {
+                    "ga4-creds": True
+                }
+            }, merge=True)
+            
+        return {
+            "status": "success",
+            "message": f"Configuración multi-propiedad de GA4 guardada para '{tenant_id_clean}'."
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error al configurar GA4 multi-propiedad: {e}")
         raise HTTPException(status_code=500, detail=str(e))

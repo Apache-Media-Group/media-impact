@@ -40,6 +40,13 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
   const [loadingGa4Properties, setLoadingGa4Properties] = useState(false);
   const [selectedGa4Properties, setSelectedGa4Properties] = useState<string[]>([]);
 
+  // Estados de GA4 (OAuth Tradicional)
+  const [ga4OauthAccountsList, setGa4OauthAccountsList] = useState<any[]>([]);
+  const [ga4OauthPropertiesList, setGa4OauthPropertiesList] = useState<any[]>([]);
+  const [validatingGa4Oauth, setValidatingGa4Oauth] = useState(false);
+  const [selectedGa4OauthAccount, setSelectedGa4OauthAccount] = useState('');
+  const [selectedGa4OauthProperty, setSelectedGa4OauthProperty] = useState('');
+
   // Fetch Conexiones Globales de GA4
   const { data: ga4Connections = [] } = useQuery({
     queryKey: ['ga4Connections'],
@@ -102,6 +109,11 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
       setGa4PropertiesList([]);
       setSelectedGa4Properties([]);
       
+      setGa4OauthAccountsList([]);
+      setGa4OauthPropertiesList([]);
+      setSelectedGa4OauthAccount('');
+      setSelectedGa4OauthProperty('');
+      
       setRedeploying(false);
       setSaving(false);
     }
@@ -115,6 +127,68 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
         ? prev.filter(id => id !== propertyId) 
         : [...prev, propertyId]
     );
+  };
+
+  const handleValidateGa4OauthCredentials = async () => {
+    if (!secretValue) {
+      alert("Por favor pega el JSON de credenciales OAuth de Google para validar.");
+      return;
+    }
+    
+    try {
+      setValidatingGa4Oauth(true);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/validate-ga4-credentials`, {
+        method: 'POST',
+        body: JSON.stringify({
+          credentials_json: secretValue.trim()
+        })
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setGa4OauthAccountsList(data.accounts || []);
+        setGa4OauthPropertiesList(data.properties || []);
+        
+        if (data.accounts && data.accounts.length > 0) {
+          setSelectedGa4OauthAccount(data.accounts[0].id);
+        }
+        if (data.properties && data.properties.length > 0) {
+          setSelectedGa4OauthProperty(data.properties[0].id);
+        }
+        
+        alert(`Credenciales de Google validadas con éxito. Se encontraron ${data.accounts?.length || 0} cuentas y ${data.properties?.length || 0} propiedades de GA4.`);
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || "Fallo en la autenticación con Google Analytics API.");
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al conectar con el servicio de validación de Google');
+    } finally {
+      setValidatingGa4Oauth(false);
+    }
+  };
+
+  const handleGa4OauthAccountChange = async (accountId: string) => {
+    setSelectedGa4OauthAccount(accountId);
+    setSelectedGa4OauthProperty('');
+    setGa4OauthPropertiesList([]);
+    
+    try {
+      setValidatingGa4Oauth(true);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/validate-ga4-properties?credentials_json=${encodeURIComponent(secretValue.trim())}&account_id=${encodeURIComponent(accountId)}`);
+      
+      if (res.ok) {
+        const data = await res.json();
+        setGa4OauthPropertiesList(data.properties || []);
+        if (data.properties && data.properties.length > 0) {
+          setSelectedGa4OauthProperty(data.properties[0].id);
+        }
+      }
+    } catch (err: any) {
+      console.error("Error loading properties for GA4 account:", err);
+    } finally {
+      setValidatingGa4Oauth(false);
+    }
   };
 
   const handleValidateAdobeCredentials = async () => {
@@ -238,6 +312,15 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
             company_id: selectedAdobeCompany || undefined,
             property_id: selectedAdobeSuite || undefined
           });
+        } else if (secretType === 'ga4-oauth' && selectedGa4OauthProperty) {
+          try {
+            const parsed = JSON.parse(secretValue.trim());
+            parsed.account_id = selectedGa4OauthAccount;
+            parsed.property_id = selectedGa4OauthProperty;
+            finalSecretValue = JSON.stringify(parsed);
+          } catch (err) {
+            console.warn("Pasted secret is not valid JSON, keeping as is:", err);
+          }
         }
         if (!finalSecretValue) {
           alert("Por favor completa los campos de credenciales.");
@@ -439,6 +522,54 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
                 rows={4}
                 className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
               />
+              
+              {secretType === 'ga4-oauth' && (
+                <div className="space-y-4 mt-4 border-l-2 border-teal pl-4">
+                  {/* Botón para validar GA4 OAuth */}
+                  <button
+                    type="button"
+                    onClick={handleValidateGa4OauthCredentials}
+                    disabled={validatingGa4Oauth || !secretValue}
+                    className="px-4 py-2 bg-gradient-to-r from-teal to-[#0d9488] text-navy hover:from-[#0d9488] hover:to-[#0f766e] rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${validatingGa4Oauth ? 'animate-spin' : ''}`} />
+                    {validatingGa4Oauth ? 'Validando...' : '🔍 Validar y Cargar Propiedades de Google'}
+                  </button>
+                  
+                  {/* Dropdowns de Cuentas y Propiedades de GA4 OAuth */}
+                  {ga4OauthAccountsList.length > 0 && (
+                    <div className="space-y-4 pt-3 border-t border-white/5">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-teal">Cuenta Google Seleccionada</label>
+                        <select 
+                          value={selectedGa4OauthAccount}
+                          onChange={(e) => handleGa4OauthAccountChange(e.target.value)}
+                          className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold"
+                        >
+                          {ga4OauthAccountsList.map(a => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      {ga4OauthPropertiesList.length > 0 && (
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-red">Propiedad GA4 (Para ETL)</label>
+                          <select 
+                            value={selectedGa4OauthProperty}
+                            onChange={(e) => setSelectedGa4OauthProperty(e.target.value)}
+                            className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold text-red"
+                          >
+                            {ga4OauthPropertiesList.map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 

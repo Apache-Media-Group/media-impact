@@ -49,6 +49,18 @@ class MCPETLService:
             from app.core.config import settings
             
             if is_json:
+                # If wrapped in a custom connection format, extract the actual credentials
+                if "credentials_json" in parsed_val:
+                    inner_val = parsed_val["credentials_json"]
+                    if isinstance(inner_val, str) and inner_val.strip().startswith("{"):
+                        import json
+                        try:
+                            parsed_val = json.loads(inner_val)
+                        except Exception:
+                            pass
+                    elif isinstance(inner_val, dict):
+                        parsed_val = inner_val
+
                 if parsed_val.get("type") == "service_account" or "private_key" in parsed_val:
                     from google.oauth2 import service_account
                     return service_account.Credentials.from_service_account_info(
@@ -153,9 +165,10 @@ class MCPETLService:
         }
 
         # ==========================================
-        # 📊 EXTRACT & TRANSFORM: GA4 & Adobe Analytics
+        # 📊 EXTRACT & TRANSFORM: GA4 & Peec
         # ==========================================
         traffic_rows = []
+        merged_traffic = {}
 
         # GA4 Sincronización
         ga4_creds_raw = credentials.get("ga4-creds")
@@ -164,34 +177,47 @@ class MCPETLService:
                 on_progress("Ejecutando Ingesta (Google Analytics 4)", "Descargando e insertando tráfico general de GA4 directamente en BigQuery...")
             try:
                 parsed_creds = self._parse_credentials("ga4-creds", ga4_creds_raw)
+                
+                ga4_property_id = "properties/default"
+                if isinstance(ga4_creds_raw, str) and ga4_creds_raw.strip().startswith("{"):
+                    import json
+                    try:
+                        raw_json = json.loads(ga4_creds_raw)
+                        if "properties" in raw_json and isinstance(raw_json["properties"], list) and len(raw_json["properties"]) > 0:
+                            ga4_property_id = raw_json["properties"][0]
+                            if not str(ga4_property_id).startswith("properties/"):
+                                ga4_property_id = f"properties/{ga4_property_id}"
+                    except Exception:
+                        pass
+
                 ga_service = GAService(credentials=parsed_creds)
                 req = RunReportRequest(
-                    property_id="properties/default",
+                    property_id=ga4_property_id,
                     date_ranges=[{"start_date": date_from, "end_date": date_to}],
-                    dimensions=["date", "source", "medium"],
-                    metrics=["activeUsers", "sessions", "conversions"]
+                    dimensions=["date"],
+                    metrics=["activeUsers", "sessions", "conversions"],
+                    limit=10000
                 )
                 res = await ga_service.run_report(req)
-                ga4_rows = []
                 for r in res.rows:
-                    ga4_rows.append({
-                        "tenant_id": self.tenant_id,
-                        "date": self._clean_date_format(r.get("date")),
-                        "source": r.get("source"),
-                        "medium": r.get("medium"),
-                        "total_sessions": int(float(r.get("sessions", 0))),
-                        "ai_referred_sessions": 0,
-                        "ai_inferred_sessions": 0,
-                        "engagement_score": float(r.get("conversions", 0)),
-                        "company_id": "ga4-account",
-                        "property_id": "properties/default",
-                        "segment_id": "all-users"
-                    })
-                if ga4_rows:
-                    logger.info(f"📤 [ETL ESCALONADA] Cargando {len(ga4_rows)} filas de GA4 directamente en BigQuery...")
-                    self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to, segment_id="all-users")
-                    self.bq_service.insert_rows("fact_traffic_evolution", ga4_rows)
-                    traffic_rows.extend(ga4_rows)
+                    key = f"{ga4_property_id}_all-users_{self._clean_date_format(r.get('date'))}"
+                    if key not in merged_traffic:
+                        merged_traffic[key] = {
+                            "tenant_id": self.tenant_id,
+                            "date": self._clean_date_format(r.get("date")),
+                            "source": "all",
+                            "medium": "all",
+                            "total_sessions": 0,
+                            "ai_referred_sessions": 0,
+                            "ai_inferred_sessions": 0,
+                            "engagement_score": 0.0,
+                            "company_id": "ga4-account",
+                            "property_id": ga4_property_id,
+                            "segment_id": "all-users"
+                        }
+                    merged_traffic[key]["total_sessions"] += int(float(r.get("sessions", 0)))
+                    merged_traffic[key]["engagement_score"] = float(r.get("conversions", 0))
+
                 results["ga4"] = f"success ({len(res.rows)} filas)"
             except Exception as e:
                 logger.error(f"Error en extracción de GA4: {e}")
@@ -337,30 +363,40 @@ class MCPETLService:
                 )
                 res = await peec_service.run_report(req)
                 
-                peec_rows = []
                 for r in res.rows:
-                    peec_rows.append({
-                        "tenant_id": self.tenant_id,
-                        "date": self._clean_date_format(r.get("date")),
-                        "source": "ai-engines",
-                        "medium": "organic-ai",
-                        "total_sessions": 0,
-                        "ai_referred_sessions": int(float(r.get("ai_referred", 0))),
-                        "ai_inferred_sessions": int(float(r.get("ai_inferred", 0))),
-                        "engagement_score": float(r.get("sentiment_score", 0)),
-                        "company_id": "peec-account",
-                        "property_id": "properties/peec-default",
-                        "segment_id": "all-users"
-                    })
-                if peec_rows:
-                    logger.info(f"📤 [ETL ESCALONADA] Cargando {len(peec_rows)} filas de Peec.ai directamente en BigQuery...")
-                    self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to, segment_id="all-users")
-                    self.bq_service.insert_rows("fact_traffic_evolution", peec_rows)
-                    traffic_rows.extend(peec_rows)
+                    date_val = self._clean_date_format(r.get("date"))
+                    # Asumiremos la propiedad default de GA4 para el cruce. Si no existe, la creamos
+                    key = f"{ga4_property_id if 'ga4_property_id' in locals() else 'properties/default'}_all-users_{date_val}"
+                    if key not in merged_traffic:
+                        merged_traffic[key] = {
+                            "tenant_id": self.tenant_id,
+                            "date": date_val,
+                            "source": "ai-engines",
+                            "medium": "organic-ai",
+                            "total_sessions": 0,
+                            "ai_referred_sessions": 0,
+                            "ai_inferred_sessions": 0,
+                            "engagement_score": float(r.get("sentiment_score", 0)),
+                            "company_id": "peec-account",
+                            "property_id": "properties/peec-default",
+                            "segment_id": "all-users"
+                        }
+                    merged_traffic[key]["ai_referred_sessions"] += int(float(r.get("ai_referred", 0)))
+                    merged_traffic[key]["ai_inferred_sessions"] += int(float(r.get("ai_inferred", 0)))
+                    if merged_traffic[key]["engagement_score"] == 0:
+                        merged_traffic[key]["engagement_score"] = float(r.get("sentiment_score", 0))
+
                 results["peec"] = f"success ({len(res.rows)} filas)"
             except Exception as e:
                 logger.error(f"Error en extracción de Peec.ai: {e}")
                 results["peec"] = f"error: {str(e)}"
+
+        # Finalizamos el bloque de Tráfico cargando TODO consolidado a BigQuery
+        traffic_rows = list(merged_traffic.values())
+        if traffic_rows:
+            logger.info(f"📤 [ETL ESCALONADA] Cargando {len(traffic_rows)} filas consolidadas de Tráfico (GA4 + Peec) en BigQuery...")
+            self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to, segment_id="all-users")
+            self.bq_service.insert_rows("fact_traffic_evolution", traffic_rows)
 
         # ==========================================
         # 📈 EXTRACT & TRANSFORM: Brandlight BI (Visibilidad)
