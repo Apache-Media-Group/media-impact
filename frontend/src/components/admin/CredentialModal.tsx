@@ -105,7 +105,23 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
   // Resetear estados cuando cambia el tenant o se abre el modal
   useEffect(() => {
     if (isOpen) {
-      setSecretType('brandlight-key');
+      // Determine the first option to select
+      let firstOption = '';
+      if (forceEditMode) {
+        if (configuredSecrets['brandlight-key']) firstOption = 'brandlight-key';
+        else if (configuredSecrets['peec-key']) firstOption = 'peec-key';
+        else if (configuredSecrets['ga4-creds']) firstOption = 'ga4-creds';
+        else if (configuredSecrets['ga4-oauth']) firstOption = 'ga4-oauth';
+        else if (configuredSecrets['adobe-creds']) firstOption = 'adobe-creds';
+      } else {
+        if (!configuredSecrets['brandlight-key']) firstOption = 'brandlight-key';
+        else if (!configuredSecrets['peec-key']) firstOption = 'peec-key';
+        else if (!configuredSecrets['ga4-creds']) firstOption = 'ga4-creds';
+        else if (!configuredSecrets['ga4-oauth']) firstOption = 'ga4-oauth';
+        else if (!configuredSecrets['adobe-creds']) firstOption = 'adobe-creds';
+      }
+
+      setSecretType(firstOption);
       setSecretValue('');
       setAdobeClientId('');
       setAdobeClientSecret('');
@@ -131,7 +147,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
       setSaving(false);
       setIsEditMode(false);
     }
-  }, [isOpen, tenantId]);
+  }, [isOpen, tenantId, forceEditMode, configuredSecrets]);
   
   // Resetea isEditMode cuando cambia el tipo de secreto o fuerza la edición si corresponde
   useEffect(() => {

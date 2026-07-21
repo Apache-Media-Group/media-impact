@@ -93,7 +93,18 @@ export const useAnalytics = () => {
           visibility_score: count > 0 ? Math.round((visibility_sum / count) * 10) / 10 : 0,
           sentiment_score: count > 0 ? Math.round((sentiment_sum / count) * 10) / 10 : 0,
           rows: result.rows,
-          row_count: result.row_count || count
+          row_count: result.row_count || count,
+          total_monitored_domains: result.metadata?.total_monitored_domains || 0,
+          competitors: result.metadata?.competitors || [],
+          topics_pr: result.metadata?.topics_pr || [],
+          topics_digital: result.metadata?.topics_digital || [],
+          domains: result.metadata?.domains || [],
+          behavior_clusters: result.metadata?.behavioral_clusters?.distribution ? [
+            { label: 'Investigación', value: result.metadata.behavioral_clusters.distribution.researcher || 0 },
+            { label: 'Respuesta Rápida', value: result.metadata.behavioral_clusters.distribution.quick_answer || 0 },
+            { label: 'Transaccional', value: result.metadata.behavioral_clusters.distribution.transactional || 0 },
+            { label: 'Casual', value: result.metadata.behavioral_clusters.distribution.casual || 0 }
+          ] : undefined
         };
         
         setData(mappedData);
