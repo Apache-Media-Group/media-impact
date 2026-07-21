@@ -245,9 +245,9 @@ async def run_report(
                         "copilot_duration": str(r.get("copilot_duration", 0.0)),
                         "other_ai_sessions": str(r.get("other_ai_sessions", 0)),
                         "other_ai_duration": str(r.get("other_ai_duration", 0.0)),
-                        "conversions": str(r["engagement_score"]),
-                        "visibility_score": str(metrics["visibility_score"]),
-                        "sentiment_score": str(metrics["sentiment_score"])
+                        "conversions": str(r.get("engagement_score", 0)),
+                        "visibility_score": str(metrics.get("visibility_score", 0)),
+                        "sentiment_score": str(metrics.get("sentiment_score", 0))
                     })
                 
                 # Si no hay filas de tráfico diario pero sí de visibilidad, insertamos una agregada para el periodo
@@ -270,8 +270,8 @@ async def run_report(
                         "other_ai_sessions": "0",
                         "other_ai_duration": "0",
                         "conversions": "0",
-                        "visibility_score": str(metrics["visibility_score"]),
-                        "sentiment_score": str(metrics["sentiment_score"])
+                        "visibility_score": str(metrics.get("visibility_score", 0)),
+                        "sentiment_score": str(metrics.get("sentiment_score", 0))
                     })
                     
                 return RunReportResponse(
@@ -279,11 +279,42 @@ async def run_report(
                     dimension_headers=["date"],
                     metric_headers=["sessions", "ai_referred", "ai_inferred", "chatgpt_sessions", "chatgpt_duration", "gemini_sessions", "gemini_duration", "perplexity_sessions", "perplexity_duration", "claude_sessions", "claude_duration", "copilot_sessions", "copilot_duration", "other_ai_sessions", "other_ai_duration", "engagement_score", "visibility_score", "sentiment_score"],
                     rows=report_rows,
-                    row_count=len(report_rows)
+                    row_count=len(report_rows),
+                    metadata={
+                        "total_monitored_domains": metrics.get("total_monitored_domains", 0),
+                        "competitors": metrics.get("competitors", []),
+                        "topics_pr": metrics.get("topics_pr", []),
+                        "topics_digital": metrics.get("topics_digital", []),
+                        "domains": metrics.get("domains", []),
+                        "behavioral_clusters": metrics.get("behavioral_clusters", {}),
+                        "visibility_by_engine": metrics.get("visibility_by_engine", [])
+                    }
                 )
         except Exception as bqe:
-            logger.warning(f"No se pudo consultar BigQuery para {t_id}, procediendo con fallback tradicional: {bqe}")
+            logger.warning(f"No se pudo consultar BigQuery para {t_id}, devolviendo reporte en ceros en lugar de fallback: {bqe}")
 
+        # Si BigQuery no tiene datos o falló, devolvemos un reporte en ceros para evitar el mock de la Live API
+        report_rows = [{
+            "date": datetime.utcnow().strftime("%Y-%m-%d"),
+            "sessions": "0", "ai_referred": "0", "ai_inferred": "0",
+            "chatgpt_sessions": "0", "chatgpt_duration": "0", "gemini_sessions": "0", "gemini_duration": "0",
+            "perplexity_sessions": "0", "perplexity_duration": "0", "claude_sessions": "0", "claude_duration": "0",
+            "copilot_sessions": "0", "copilot_duration": "0", "other_ai_sessions": "0", "other_ai_duration": "0",
+            "conversions": "0", "visibility_score": "0", "sentiment_score": "0"
+        }]
+        return RunReportResponse(
+            property_id=request.property_id or "bigquery-fact",
+            dimension_headers=["date"],
+            metric_headers=["sessions", "ai_referred", "ai_inferred", "chatgpt_sessions", "chatgpt_duration", "gemini_sessions", "gemini_duration", "perplexity_sessions", "perplexity_duration", "claude_sessions", "claude_duration", "copilot_sessions", "copilot_duration", "other_ai_sessions", "other_ai_duration", "engagement_score", "visibility_score", "sentiment_score"],
+            rows=report_rows,
+            row_count=len(report_rows),
+            metadata={
+                "total_monitored_domains": 0, "competitors": [], "topics_pr": [],
+                "topics_digital": [], "domains": [], "behavioral_clusters": {}, "visibility_by_engine": []
+            }
+        )
+
+    # Si NO hay tenant_id o es explícitamente live_api=True, sí usamos Live API
     try:
         service = get_analytics_service(s_id, c_id, user_email)
         result = await service.run_report(request)
