@@ -8,6 +8,8 @@ interface CredentialModalProps {
   isOpen: boolean;
   onClose: () => void;
   tenantId: string | null;
+  configuredSecrets?: Record<string, boolean>;
+  forceEditMode?: boolean;
   onSaveSuccess: (message: string) => void;
   onSaveError: (error: string) => void;
 }
@@ -16,6 +18,8 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
   isOpen,
   onClose,
   tenantId,
+  configuredSecrets = {},
+  forceEditMode = false,
   onSaveSuccess,
   onSaveError,
 }) => {
@@ -23,6 +27,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
   const [secretValue, setSecretValue] = useState('');
   const [saving, setSaving] = useState(false);
   const [redeploying, setRedeploying] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   // Estados de Adobe Analytics
   const [adobeClientId, setAdobeClientId] = useState('');
@@ -33,6 +38,11 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
   const [validatingAdobe, setValidatingAdobe] = useState(false);
   const [selectedAdobeCompany, setSelectedAdobeCompany] = useState('');
   const [selectedAdobeSuite, setSelectedAdobeSuite] = useState('');
+
+  // Estados de Peec.ai
+  const [peecProjectsList, setPeecProjectsList] = useState<any[]>([]);
+  const [validatingPeec, setValidatingPeec] = useState(false);
+  const [selectedPeecProject, setSelectedPeecProject] = useState('');
 
   // Estados de GA4 (Nueva arquitectura multichoice)
   const [selectedGa4Connection, setSelectedGa4Connection] = useState('');
@@ -114,10 +124,25 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
       setSelectedGa4OauthAccount('');
       setSelectedGa4OauthProperty('');
       
+      setPeecProjectsList([]);
+      setSelectedPeecProject('');
+      
       setRedeploying(false);
       setSaving(false);
+      setIsEditMode(false);
     }
   }, [isOpen, tenantId]);
+  
+  // Resetea isEditMode cuando cambia el tipo de secreto o fuerza la edición si corresponde
+  useEffect(() => {
+    if (forceEditMode && configuredSecrets[secretType]) {
+      handleEditConfig();
+    } else {
+      setIsEditMode(false);
+      setSecretValue('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [secretType]);
 
   if (!isOpen || !tenantId) return null;
 
@@ -257,6 +282,73 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     }
   };
 
+  const handleValidatePeecCredentials = async () => {
+    if (!secretValue) {
+      alert("Por favor ingresa el API Key de Peec.ai para validar.");
+      return;
+    }
+    
+    try {
+      setValidatingPeec(true);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/validate-peec-projects?api_key=${encodeURIComponent(secretValue.trim())}`);
+      
+      if (res.ok) {
+        const data = await res.json();
+        setPeecProjectsList(data.projects || []);
+        
+        if (data.projects && data.projects.length > 0) {
+          setSelectedPeecProject(data.projects[0].id);
+        }
+        
+        alert(`API Key de Peec validadas con éxito. Se encontraron ${data.projects?.length || 0} proyectos.`);
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || "Fallo en la autenticación con Peec API.");
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al conectar con el servicio de validación de Peec.ai');
+    } finally {
+      setValidatingPeec(false);
+    }
+  };
+
+  const handleEditConfig = async () => {
+    if (!tenantId) return;
+    try {
+      setSaving(true);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/secrets/${secretType}/options`);
+      if (res.ok) {
+        const data = await res.json();
+        const opts = data.options;
+        const cur = data.current_selection;
+
+        if (secretType === 'peec-key') {
+          setPeecProjectsList(opts.projects || []);
+          if (cur.project_id) setSelectedPeecProject(cur.project_id);
+        } else if (secretType === 'adobe-creds') {
+          setAdobeCompaniesList(opts.companies || []);
+          setAdobeSuitesList(opts.suites || []);
+          if (cur.company_id) setSelectedAdobeCompany(cur.company_id);
+          if (cur.property_id) setSelectedAdobeSuite(cur.property_id);
+        } else if (secretType === 'ga4-creds' || secretType === 'ga4-oauth') {
+          setGa4OauthAccountsList(opts.accounts || []);
+          setGa4OauthPropertiesList(opts.properties || []);
+          if (cur.account_id) setSelectedGa4OauthAccount(cur.account_id);
+          if (cur.property_id) setSelectedGa4OauthProperty(cur.property_id);
+        }
+        
+        setIsEditMode(true);
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || "Error al cargar opciones de configuración.");
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al conectar con el backend para editar configuración');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleRedeployEtl = async () => {
     try {
       setRedeploying(true);
@@ -283,6 +375,33 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     try {
       setSaving(true);
       
+      if (isEditMode) {
+        let updates: Record<string, any> = {};
+        if (secretType === 'peec-key') {
+          updates.project_id = selectedPeecProject;
+        } else if (secretType === 'adobe-creds') {
+          updates.company_id = selectedAdobeCompany;
+          updates.property_id = selectedAdobeSuite;
+        } else if (secretType === 'ga4-creds' || secretType === 'ga4-oauth') {
+          updates.account_id = selectedGa4OauthAccount;
+          updates.property_id = selectedGa4OauthProperty;
+        }
+
+        const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/secrets/${secretType}`, {
+          method: 'PATCH',
+          body: JSON.stringify(updates)
+        });
+        
+        if (res.ok) {
+          onSaveSuccess(`Configuración del secreto '${secretType}' actualizada con éxito.`);
+          onClose();
+        } else {
+          const err = await res.json();
+          throw new Error(err.detail || "Error al actualizar la configuración");
+        }
+        return;
+      }
+      
       if (secretType === 'ga4-creds') {
         if (!selectedGa4Connection || selectedGa4Properties.length === 0) {
           alert("Debes seleccionar una conexión global y al menos una propiedad de GA4.");
@@ -302,7 +421,6 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
           throw new Error("Error al guardar la configuración de GA4");
         }
       } else {
-        // Lógica original de secretos
         let finalSecretValue = secretValue;
         if (secretType === 'adobe-creds') {
           finalSecretValue = JSON.stringify({
@@ -311,6 +429,11 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
             org_id: adobeOrgId.trim(),
             company_id: selectedAdobeCompany || undefined,
             property_id: selectedAdobeSuite || undefined
+          });
+        } else if (secretType === 'peec-key') {
+          finalSecretValue = JSON.stringify({
+            api_key: secretValue.trim(),
+            project_id: selectedPeecProject || undefined
           });
         } else if (secretType === 'ga4-oauth' && selectedGa4OauthProperty) {
           try {
@@ -369,72 +492,72 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
             />
           </div>
 
-          <div>
-            <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Tipo de Servicio Analítico</label>
-            <select 
-              value={secretType}
-              onChange={(e) => setSecretType(e.target.value)}
-              className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red"
-            >
-              <option value="brandlight-key">Brandlight BI API Key (Visibilidad / SoV)</option>
-              <option value="peec-key">Peec.ai API Token (Comportamiento de IA)</option>
-              <option value="ga4-creds">GA4 Service Account JSON (Opción Recomendada)</option>
-              <option value="ga4-oauth">GA4 Usuario OAuth (Necesita renovación periódica)</option>
-              <option value="adobe-creds">Adobe Analytics API Credentials (3 Campos)</option>
-            </select>
+          <div className="space-y-1.5 flex justify-between items-end">
+            <div className="w-full">
+              <label className="text-xs font-bold uppercase tracking-widest text-mid block mb-1">
+                ¿Qué llave quieres actualizar?
+              </label>
+              <select
+                value={secretType}
+                onChange={(e) => setSecretType(e.target.value)}
+                className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 outline-none"
+              >
+                <option value="brandlight-key">Clave API de Brandlight (Menciones)</option>
+                <option value="peec-key">Clave API de Peec.ai (Brand Intelligence)</option>
+                <option value="ga4-creds">Conexión GA4 (Global Service Account)</option>
+                <option value="ga4-oauth">Credenciales GA4 (JSON OAuth / Service Account)</option>
+                <option value="adobe-creds">Credenciales de Adobe Analytics</option>
+              </select>
+            </div>
           </div>
 
           {secretType === 'adobe-creds' ? (
-            <div className="space-y-4 border-l-2 border-red pl-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Adobe Client ID (API Key)</label>
-                <input 
-                  type="text" 
-                  value={adobeClientId}
-                  onChange={(e) => setAdobeClientId(e.target.value)}
-                  placeholder="ej: e6c7619213194a289f81f18..."
-                  required
-                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Adobe Client Secret</label>
-                <input 
-                  type="password" 
-                  value={adobeClientSecret}
-                  onChange={(e) => setAdobeClientSecret(e.target.value)}
-                  placeholder="Pega aquí el Client Secret de Adobe..."
-                  required
-                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red"
-                />
-              </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Adobe Organization ID (IMS Org ID)</label>
-                <input 
-                  type="text" 
-                  value={adobeOrgId}
-                  onChange={(e) => setAdobeOrgId(e.target.value)}
-                  placeholder="ej: 12345ABCDE@AdobeOrg"
-                  required
-                  className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red"
-                />
-              </div>
-              
-              {/* Botón para validar en caliente */}
-              <div className="pt-2">
-                <button
-                  type="button"
-                  onClick={handleValidateAdobeCredentials}
-                  disabled={validatingAdobe || !adobeClientId || !adobeClientSecret || !adobeOrgId}
-                  className="px-4 py-2 bg-gradient-to-r from-red to-[#b91c1c] text-white hover:from-[#b91c1c] hover:to-[#991b1b] rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${validatingAdobe ? 'animate-spin' : ''}`} />
-                  {validatingAdobe ? 'Validando...' : '🔍 Validar y Cargar Compañías de Adobe'}
-                </button>
-              </div>
-              
-              {/* Selectores de Compañías y Report Suites de Adobe */}
-              {adobeCompaniesList.length > 0 && (
+            <div className="space-y-4">
+              {!isEditMode && (
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-widest text-mid block">Client ID</label>
+                    <input
+                      type="password"
+                      placeholder="e.g. 1a2b3c4d5e6f7g8h9i0j..."
+                      value={adobeClientId}
+                      onChange={(e) => setAdobeClientId(e.target.value)}
+                      className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:border-amber-400 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-widest text-mid block">Client Secret</label>
+                    <input
+                      type="password"
+                      placeholder="e.g. p8e-xxxxxxxx..."
+                      value={adobeClientSecret}
+                      onChange={(e) => setAdobeClientSecret(e.target.value)}
+                      className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:border-amber-400 font-mono"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-widest text-mid block">Organization ID</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1234567890ABCDEF@AdobeOrg"
+                      value={adobeOrgId}
+                      onChange={(e) => setAdobeOrgId(e.target.value)}
+                      className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder-white/20 focus:border-amber-400 font-mono"
+                    />
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleValidateAdobeCredentials}
+                    disabled={validatingAdobe || !adobeClientId.trim() || !adobeClientSecret.trim() || !adobeOrgId.trim()}
+                    className="w-full py-2 bg-rose-500/20 text-rose-300 rounded-lg text-xs font-bold uppercase hover:bg-rose-500/30 transition-colors border border-rose-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {validatingAdobe ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : '🔍 Validar Credenciales Adobe'}
+                  </button>
+                </div>
+              )}
+
+              {(isEditMode || adobeCompaniesList.length > 0) && (
                 <div className="space-y-4 pt-3 border-t border-white/5">
                   <div>
                     <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-teal">Compañía Seleccionada</label>
@@ -511,65 +634,122 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
                 <p className="text-xs text-red-400">No se encontraron propiedades accesibles para esta conexión.</p>
               ) : null}
             </div>
+          ) : secretType === 'ga4-oauth' ? (
+            <div className="space-y-4">
+              {!isEditMode && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-widest text-mid block">
+                    JSON de Credenciales de Google (OAuth)
+                  </label>
+                  <textarea
+                    placeholder='Pega el contenido completo del archivo JSON descargado desde Google Cloud Platform...'
+                    value={secretValue}
+                    onChange={(e) => setSecretValue(e.target.value)}
+                    rows={4}
+                    className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-3 py-2.5 text-xs text-white placeholder-white/20 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 outline-none font-mono custom-scrollbar resize-none"
+                  />
+                  
+                  <button
+                    type="button"
+                    onClick={handleValidateGa4OauthCredentials}
+                    disabled={validatingGa4Oauth || !secretValue.trim()}
+                    className="w-full mt-2 py-2 bg-emerald-500/20 text-emerald-300 rounded-lg text-xs font-bold uppercase hover:bg-emerald-500/30 transition-colors border border-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {validatingGa4Oauth ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : '🔍 Validar y Buscar Cuentas de GA4'}
+                  </button>
+                </div>
+              )}
+              
+              {(isEditMode || ga4OauthAccountsList.length > 0) && (
+                <div className="space-y-3 bg-emerald-500/10 p-4 rounded-xl border border-emerald-500/20">
+                  <div className="space-y-4 pt-3 border-t border-white/5">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-teal">Cuenta Google Seleccionada</label>
+                      <select 
+                        value={selectedGa4OauthAccount}
+                        onChange={(e) => handleGa4OauthAccountChange(e.target.value)}
+                        className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold"
+                      >
+                        {ga4OauthAccountsList.map(a => (
+                          <option key={a.id} value={a.id}>{a.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    {ga4OauthPropertiesList.length > 0 && (
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-red">Propiedad GA4 (Para ETL)</label>
+                        <select 
+                          value={selectedGa4OauthProperty}
+                          onChange={(e) => setSelectedGa4OauthProperty(e.target.value)}
+                          className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold text-red"
+                        >
+                          {ga4OauthPropertiesList.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : secretType === 'peec-key' ? (
+            <div className="space-y-4">
+              {!isEditMode && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-widest text-mid block">
+                    LLAVE SECRETA (API Key de Peec)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Pega la llave secreta provista por el proveedor aquí..."
+                    value={secretValue}
+                    onChange={(e) => setSecretValue(e.target.value)}
+                    className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-3 py-2.5 text-sm text-white placeholder-white/20 focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 outline-none font-mono"
+                  />
+                  
+                  <button
+                    type="button"
+                    onClick={handleValidatePeecCredentials}
+                    disabled={validatingPeec || !secretValue.trim()}
+                    className="w-full mt-2 py-2 bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-bold uppercase hover:bg-indigo-500/30 transition-colors border border-indigo-500/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {validatingPeec ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : '🔍 Validar y Cargar Proyectos de Peec.ai'}
+                  </button>
+                </div>
+              )}
+              
+              {(isEditMode || peecProjectsList.length > 0) && (
+                <div className="space-y-1.5 bg-indigo-500/10 p-4 rounded-xl border border-indigo-500/20">
+                  <div className="space-y-4 pt-3 border-t border-white/5">
+                    <div>
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-indigo-400">Proyecto Peec.ai Seleccionado</label>
+                      <select 
+                        value={selectedPeecProject}
+                        onChange={(e) => setSelectedPeecProject(e.target.value)}
+                        className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold text-indigo-400"
+                      >
+                        {peecProjectsList.map(p => (
+                          <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Valor de la Llave Secreta (API Key / Token / JSON de OAuth)</label>
+             <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Valor de la Llave Secreta (API Key / Token)</label>
               <textarea 
                 value={secretValue}
                 onChange={(e) => setSecretValue(e.target.value)}
-                placeholder={secretType === 'ga4-oauth' ? "Pega aquí el JSON del Refresh Token OAuth de Google Analytics..." : "Pega aquí la clave secreta obtenida del proveedor analítico..."}
+                placeholder="Pega aquí la clave secreta obtenida del proveedor analítico..."
                 required={secretType !== 'ga4-creds'}
                 rows={4}
                 className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
               />
-              
-              {secretType === 'ga4-oauth' && (
-                <div className="space-y-4 mt-4 border-l-2 border-teal pl-4">
-                  {/* Botón para validar GA4 OAuth */}
-                  <button
-                    type="button"
-                    onClick={handleValidateGa4OauthCredentials}
-                    disabled={validatingGa4Oauth || !secretValue}
-                    className="px-4 py-2 bg-gradient-to-r from-teal to-[#0d9488] text-navy hover:from-[#0d9488] hover:to-[#0f766e] rounded-lg text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-50 flex items-center justify-center gap-1.5"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${validatingGa4Oauth ? 'animate-spin' : ''}`} />
-                    {validatingGa4Oauth ? 'Validando...' : '🔍 Validar y Cargar Propiedades de Google'}
-                  </button>
-                  
-                  {/* Dropdowns de Cuentas y Propiedades de GA4 OAuth */}
-                  {ga4OauthAccountsList.length > 0 && (
-                    <div className="space-y-4 pt-3 border-t border-white/5">
-                      <div>
-                        <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-teal">Cuenta Google Seleccionada</label>
-                        <select 
-                          value={selectedGa4OauthAccount}
-                          onChange={(e) => handleGa4OauthAccountChange(e.target.value)}
-                          className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold"
-                        >
-                          {ga4OauthAccountsList.map(a => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      
-                      {ga4OauthPropertiesList.length > 0 && (
-                        <div>
-                          <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1 text-red">Propiedad GA4 (Para ETL)</label>
-                          <select 
-                            value={selectedGa4OauthProperty}
-                            onChange={(e) => setSelectedGa4OauthProperty(e.target.value)}
-                            className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red font-bold text-red"
-                          >
-                            {ga4OauthPropertiesList.map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           )}
 

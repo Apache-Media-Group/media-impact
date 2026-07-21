@@ -33,6 +33,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminEmailProp, onBack, 
 
   const [secretTenantId, setSecretTenantId] = useState<string | null>(null);
   const [showSecretModal, setShowSecretModal] = useState(false);
+  const [forceEditMode, setForceEditMode] = useState(false);
 
   const [auditTenantId, setAuditTenantId] = useState<string | null>(null);
   const [showAuditModal, setShowAuditModal] = useState(false);
@@ -92,8 +93,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminEmailProp, onBack, 
     setShowTenantModal(true);
   };
 
-  const openSecretModal = (tenantId: string) => {
+  const openSecretModal = (tenantId: string, forceEditMode: boolean = false) => {
     setSecretTenantId(tenantId);
+    setForceEditMode(forceEditMode);
     setShowSecretModal(true);
   };
 
@@ -278,6 +280,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({ adminEmailProp, onBack, 
           isOpen={showSecretModal}
           onClose={() => setShowSecretModal(false)}
           tenantId={secretTenantId}
+          configuredSecrets={tenants.find(t => t.tenant_id === secretTenantId)?.configured_secrets || {}}
+          forceEditMode={forceEditMode}
           onSaveSuccess={handleSaveSecretSuccess}
           onSaveError={handleSaveSecretError}
         />

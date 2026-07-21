@@ -9,7 +9,7 @@ interface TenantTableProps {
   onPreviewTenant?: (tenantId: string) => void;
   onPreviewLiveAPI?: (tenantId: string) => void;
   openAuditModal: (tenantId: string) => void;
-  openSecretModal: (tenantId: string) => void;
+  openSecretModal: (tenantId: string, isEditMode?: boolean) => void;
   openEditModal: (tenant: TenantConfig) => void;
 }
 
@@ -125,10 +125,16 @@ export const TenantTable: React.FC<TenantTableProps> = ({
                   <Wrench className="w-3.5 h-3.5" /> Auditoría / Patcher
                 </button>
                 <button
-                  onClick={() => openSecretModal(t.tenant_id)}
+                  onClick={() => openSecretModal(t.tenant_id, false)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
                 >
-                  <Key className="w-3.5 h-3.5" /> Claves API (GCP)
+                  <Key className="w-3.5 h-3.5" /> + Claves
+                </button>
+                <button
+                  onClick={() => openSecretModal(t.tenant_id, true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
+                >
+                  <Key className="w-3.5 h-3.5" /> Editar Claves
                 </button>
                 <button
                   onClick={() => openEditModal(t)}
