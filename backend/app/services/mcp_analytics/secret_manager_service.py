@@ -97,3 +97,23 @@ class SecretManagerService:
         except Exception as e:
             logger.debug(f"No se pudo recuperar el secreto {secret_id} desde Secret Manager: {e}")
             return None
+
+    def delete_tenant_secret(self, tenant_id: str, secret_type: str) -> bool:
+        """
+        Elimina completamente un secreto y todas sus versiones de GCP Secret Manager.
+        """
+        if not self.client:
+            logger.warning("Secret Manager Client no está disponible. No se puede eliminar el secreto.")
+            return False
+            
+        try:
+            secret_id = f"llyc-mcp-{tenant_id}-{secret_type}".lower().strip()
+            secret_path = f"projects/{self.project_id}/secrets/{secret_id}"
+            
+            self.client.delete_secret(request={"name": secret_path})
+            logger.info(f"✅ Secreto {secret_id} eliminado con éxito de Secret Manager.")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error al eliminar el secreto {secret_id} de Secret Manager: {e}")
+            return False

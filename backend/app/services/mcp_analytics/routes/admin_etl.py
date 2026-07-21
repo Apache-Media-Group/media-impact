@@ -360,6 +360,176 @@ async def save_tenant_secret_admin(
         update_deployment_status(tenant_id_clean, "failed", "Error en Despliegue", f"No se pudo guardar la clave: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/admin/tenants/{tenant_id}/secrets/{secret_type}/options", response_model=Dict[str, Any])
+async def get_tenant_secret_options_admin(
+    tenant_id: str,
+    secret_type: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Recupera la llave guardada y consulta la respectiva API analítica para retornar 
+    las opciones disponibles de propiedades/proyectos y cuál está actualmente seleccionada,
+    sin enviar la llave API real al frontend.
+    """
+    try:
+        sms = SecretManagerService()
+        tenant_id_clean = tenant_id.lower().strip()
+        secret_type_clean = secret_type.lower().strip()
+
+        secret_val = sms.get_tenant_secret(tenant_id_clean, secret_type_clean)
+        if not secret_val:
+            raise HTTPException(status_code=404, detail=f"No se encontró el secreto {secret_type_clean} configurado para este tenant.")
+
+        options = {}
+        current_selection = {}
+
+        if secret_type_clean == "peec-key":
+            from app.services.mcp_analytics.peec_service import PeecService
+            try:
+                parsed = json.loads(secret_val)
+                api_key = parsed.get("api_key", secret_val)
+                project_id = parsed.get("project_id")
+            except Exception:
+                # Legacy format where secret is just a string API key
+                parsed = {"api_key": secret_val}
+                project_id = None
+                
+            service = PeecService(credentials=parsed)
+            properties = await service.list_properties()
+            
+            options["projects"] = [{"id": prop.property_id, "name": prop.display_name} for prop in properties]
+            current_selection["project_id"] = project_id
+
+        elif secret_type_clean == "ga4-creds":
+            parsed = json.loads(secret_val)
+            # Support both old single property or new multi-property (we handle OAuth case here)
+            ga_service = GAService(credentials=parsed)
+            accounts = await ga_service.list_accounts()
+            options["accounts"] = [{"id": acc.account_id, "name": acc.display_name} for acc in accounts]
+            
+            acc_id = parsed.get("account_id")
+            if acc_id:
+                props = await ga_service.list_properties(account_id=acc_id)
+                options["properties"] = [{"id": p.property_id, "name": p.display_name} for p in props]
+                
+            current_selection["account_id"] = parsed.get("account_id")
+            current_selection["property_id"] = parsed.get("property_id")
+
+        elif secret_type_clean == "adobe-creds":
+            parsed = json.loads(secret_val)
+            service = AdobeAnalyticsService(credentials=parsed)
+            
+            accounts = await service.list_accounts()
+            options["companies"] = [{"id": acc.account_id, "name": acc.display_name} for acc in accounts]
+            
+            comp_id = parsed.get("company_id")
+            if comp_id:
+                props = await service.list_properties(account_id=comp_id)
+                options["suites"] = [{"id": p.property_id, "name": p.display_name} for p in props]
+                
+            current_selection["company_id"] = parsed.get("company_id")
+            current_selection["property_id"] = parsed.get("property_id")
+            
+        elif secret_type_clean == "brandlight-key":
+            pass # No options
+            
+        else:
+            raise HTTPException(status_code=400, detail="Este tipo de secreto no soporta opciones dinámicas.")
+
+        return {
+            "status": "success",
+            "options": options,
+            "current_selection": current_selection
+        }
+
+    except Exception as e:
+        logger.error(f"Error al obtener opciones para el secreto de tenant en admin: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/admin/tenants/{tenant_id}/secrets/{secret_type}", response_model=Dict[str, Any])
+async def patch_tenant_secret_admin(
+    tenant_id: str,
+    secret_type: str,
+    updates: Dict[str, Any],
+    background_tasks: BackgroundTasks,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Actualiza propiedades parciales de un secreto (ej. cambiar project_id) preservando la API Key original.
+    """
+    try:
+        sms = SecretManagerService()
+        tenant_id_clean = tenant_id.lower().strip()
+        secret_type_clean = secret_type.lower().strip()
+
+        secret_val = sms.get_tenant_secret(tenant_id_clean, secret_type_clean)
+        if not secret_val:
+            raise HTTPException(status_code=404, detail="El secreto a actualizar no existe.")
+            
+        try:
+            parsed_secret = json.loads(secret_val)
+        except Exception:
+            if secret_type_clean == "peec-key":
+                parsed_secret = {"api_key": secret_val}
+            else:
+                raise HTTPException(status_code=400, detail="El formato actual del secreto no soporta actualizaciones parciales.")
+
+        # Aplicar actualizaciones seguras (evitar sobreescribir la api_key a vacía por error)
+        for k, v in updates.items():
+            if k in ["api_key", "client_secret", "credentials_json"] and not v:
+                continue
+            parsed_secret[k] = v
+
+        # Guardar en secret manager del tenant
+        sms.save_tenant_secret(
+            tenant_id=tenant_id_clean,
+            secret_type=secret_type_clean,
+            secret_value=json.dumps(parsed_secret)
+        )
+        
+        # Trigger ETL automatically on configuration change
+        create_or_update_tenant_scheduler(tenant_id_clean)
+        background_tasks.add_task(run_historical_backfill_task, tenant_id_clean)
+
+        return {
+            "status": "success",
+            "message": f"Configuración del secreto {secret_type_clean} actualizada."
+        }
+    except Exception as e:
+        logger.error(f"Error al actualizar configuración parcial de secreto: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/admin/tenants/{tenant_id}/secrets/{secret_type}")
+async def delete_tenant_secret_admin(
+    tenant_id: str,
+    secret_type: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Elimina por completo una llave secreta de un cliente.
+    """
+    try:
+        sms = SecretManagerService()
+        tenant_id_clean = tenant_id.lower().strip()
+        secret_type_clean = secret_type.lower().strip()
+
+        success = sms.delete_tenant_secret(tenant_id_clean, secret_type_clean)
+        if not success:
+            # Maybe it didn't exist, we just return ok
+            pass
+            
+        # We might also want to re-trigger ETL if a key is deleted? Usually not necessary
+        # unless to clear out existing data. We will leave it as just deleting the key.
+        
+        return {
+            "status": "success",
+            "message": f"Secreto {secret_type_clean} eliminado con éxito."
+        }
+    except Exception as e:
+        logger.error(f"Error al eliminar secreto de tenant: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/admin/tenants/validate-ga4-credentials", response_model=Dict[str, Any])
 async def validate_ga4_credentials_admin(
     req: GA4ValidationRequest,
@@ -462,6 +632,27 @@ async def validate_adobe_credentials_admin(
         }
     except Exception as e:
         logger.error(f"Error al validar credenciales de Adobe en admin: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/admin/tenants/validate-peec-projects", response_model=Dict[str, Any])
+async def validate_peec_projects_admin(
+    api_key: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Retorna la lista de Proyectos disponibles para una llave de Peec.ai.
+    """
+    try:
+        from app.services.mcp_analytics.peec_service import PeecService
+        service = PeecService(credentials={"api_key": api_key})
+        properties = await service.list_properties()
+        projects_list = [{"id": prop.property_id, "name": prop.display_name} for prop in properties]
+        return {
+            "status": "success",
+            "projects": projects_list
+        }
+    except Exception as e:
+        logger.error(f"Error al validar credenciales de Peec en admin: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/admin/tenants/validate-adobe-properties", response_model=Dict[str, Any])

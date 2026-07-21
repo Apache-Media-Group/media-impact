@@ -369,6 +369,30 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     }
   };
 
+  const handleDeleteSecret = async () => {
+    if (!tenantId) return;
+    if (!window.confirm(`¿Estás seguro de que quieres borrar la llave secreta para ${secretType}? Esto podría romper los flujos ETL que dependan de ella.`)) {
+      return;
+    }
+    try {
+      setSaving(true);
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/secrets/${secretType}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        onSaveSuccess(`Secreto '${secretType}' eliminado con éxito.`);
+        onClose();
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || "Error al eliminar el secreto.");
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al conectar con el backend para eliminar el secreto');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSaveSecret = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -502,16 +526,18 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
                 onChange={(e) => setSecretType(e.target.value)}
                 className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-amber-400 focus:ring-1 focus:ring-amber-400/50 outline-none"
               >
-                <option value="brandlight-key">Clave API de Brandlight (Menciones)</option>
-                <option value="peec-key">Clave API de Peec.ai (Brand Intelligence)</option>
-                <option value="ga4-creds">Conexión GA4 (Global Service Account)</option>
-                <option value="ga4-oauth">Credenciales GA4 (JSON OAuth / Service Account)</option>
-                <option value="adobe-creds">Credenciales de Adobe Analytics</option>
+                {!secretType && <option value="">¡Todas las llaves disponibles ya están configuradas!</option>}
+                {(forceEditMode ? configuredSecrets['brandlight-key'] : !configuredSecrets['brandlight-key']) && <option value="brandlight-key">Clave API de Brandlight (Menciones)</option>}
+                {(forceEditMode ? configuredSecrets['peec-key'] : !configuredSecrets['peec-key']) && <option value="peec-key">Clave API de Peec.ai (Brand Intelligence)</option>}
+                {(forceEditMode ? configuredSecrets['ga4-creds'] : !configuredSecrets['ga4-creds']) && <option value="ga4-creds">Conexión GA4 (Global Service Account)</option>}
+                {(forceEditMode ? configuredSecrets['ga4-oauth'] : !configuredSecrets['ga4-oauth']) && <option value="ga4-oauth">Credenciales GA4 (JSON OAuth / Service Account)</option>}
+                {(forceEditMode ? configuredSecrets['adobe-creds'] : !configuredSecrets['adobe-creds']) && <option value="adobe-creds">Credenciales de Adobe Analytics</option>}
               </select>
             </div>
           </div>
 
-          {secretType === 'adobe-creds' ? (
+          {secretType && (
+            secretType === 'adobe-creds' ? (
             <div className="space-y-4">
               {!isEditMode && (
                 <div className="space-y-3">
@@ -751,7 +777,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
                 className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white font-mono focus:outline-none focus:border-red resize-none"
               />
             </div>
-          )}
+          ))}
 
           {/* Sección de Automatización ETL y Scheduler */}
           <div className="bg-white/5 border border-white/5 p-4 rounded-xl space-y-3 mt-4">
@@ -776,6 +802,26 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+            {forceEditMode && isEditMode && (
+              <>
+                <button 
+                  type="button"
+                  onClick={handleDeleteSecret}
+                  disabled={saving}
+                  className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                >
+                  Borrar Llave
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setIsEditMode(false)}
+                  disabled={saving}
+                  className="px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors disabled:opacity-50"
+                >
+                  Renovar Llave
+                </button>
+              </>
+            )}
             <button 
               type="button"
               onClick={onClose}
@@ -785,7 +831,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
             </button>
             <button 
               type="submit"
-              disabled={saving}
+              disabled={saving || !secretType}
               className="flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-navy rounded-lg text-xs font-black uppercase tracking-wider transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4" /> {saving ? 'Cifrando...' : 'Encriptar y Guardar'}
