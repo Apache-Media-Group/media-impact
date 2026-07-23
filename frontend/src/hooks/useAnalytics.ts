@@ -99,6 +99,7 @@ export const useAnalytics = () => {
           topics_pr: result.metadata?.topics_pr || [],
           topics_digital: result.metadata?.topics_digital || [],
           domains: result.metadata?.domains || [],
+          visibility_by_engine: result.metadata?.visibility_by_engine || [],
           behavior_clusters: result.metadata?.behavioral_clusters?.distribution ? [
             { label: 'Investigación', value: result.metadata.behavioral_clusters.distribution.researcher || 0 },
             { label: 'Respuesta Rápida', value: result.metadata.behavioral_clusters.distribution.quick_answer || 0 },

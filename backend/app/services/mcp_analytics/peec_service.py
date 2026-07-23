@@ -270,6 +270,8 @@ class PeecService(AnalyticsService):
                                 d["sentiment_score"] = d.get("citation_avg", 0) * 10
                             if "share_of_voice" not in d:
                                 d["share_of_voice"] = d.get("usage_rate", 0) * 100
+                            
+                            d["classification"] = d.get("classification", "Earned")
                         return domains
                     else:
                         txt = await resp.text()
@@ -303,9 +305,44 @@ class PeecService(AnalyticsService):
                     if resp.status == 200:
                         data = await resp.json()
                         topics = data.get("data", [])
+                        
+                        # Fetch topic metrics from /reports/brands
+                        topic_metrics = {}
+                        try:
+                            project_name = "Vidal & Vidal"
+                            async with session.get(f"{self.base_url}/projects", headers=headers) as p_resp:
+                                if p_resp.status == 200:
+                                    p_data = await p_resp.json()
+                                    for p in p_data.get("data", []):
+                                        if p.get("id") == actual_id:
+                                            project_name = p.get("name", project_name)
+                                            break
+                            
+                            rep_payload = {
+                                "project_id": actual_id,
+                                "start_date": start_date or (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d"),
+                                "end_date": end_date or datetime.utcnow().strftime("%Y-%m-%d"),
+                                "dimensions": ["topic_id"]
+                            }
+                            async with session.post(f"{self.base_url}/reports/brands", json=rep_payload, headers=headers) as rep_resp:
+                                if rep_resp.status == 200:
+                                    rep_data = await rep_resp.json()
+                                    raw_data = rep_data.get("data", [])
+                                    # Filter by the main project brand
+                                    main_brand_data = [item for item in raw_data if item.get("brand", {}).get("name") == project_name]
+                                    if not main_brand_data and raw_data:
+                                        main_brand_data = raw_data
+                                        
+                                    for item in main_brand_data:
+                                        tid = item.get("topic", {}).get("id")
+                                        if tid:
+                                            topic_metrics[tid] = item.get("mention_count", 0)
+                        except Exception as e:
+                            logger.error(f"Error fetching topic metrics from Peec.ai: {e}")
+                            
                         for t in topics:
                             t["topic"] = t.get("name", "(not set)")
-                            t["priority_score"] = 0
+                            t["priority_score"] = topic_metrics.get(t.get("id"), 0)
                             t["recommendation_strategy"] = "Digital / SEO"
                         return topics
                     else:

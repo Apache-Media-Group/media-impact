@@ -695,33 +695,23 @@ const App: React.FC = () => {
 
   // Obtener dominios unbranded / branded dinámicamente desde BigQuery
   const getDomainsData = () => {
-    let brandedList: any[] = [];
-    let unbrandedList: any[] = [];
+    let allDomains: any[] = [];
     
     if (data && data.domains) {
       data.domains.forEach((d: any) => {
-        const formatted = {
+        allDomains.push({
           d: d.domain,
-          m: '-', // Menciones reales pueden venir después, por ahora mostramos guión o un proxy
-          g: d.visibility_score
-        };
-        if (d.is_branded) {
-          brandedList.push(formatted);
-        } else {
-          unbrandedList.push(formatted);
-        }
+          m: '-', // Menciones
+          g: d.visibility_score,
+          c: d.classification
+        });
       });
     }
     
-    return {
-      branded: brandedList.sort((a, b) => b.g - a.g),
-      unbranded: unbrandedList.sort((a, b) => b.g - a.g)
-    };
+    return allDomains.sort((a, b) => b.g - a.g).slice(0, 10);
   };
 
-  const domainsData = getDomainsData();
-  const top10Unbranded = domainsData.unbranded.slice(0, 10);
-  const top10Branded = domainsData.branded.slice(0, 10);
+  const top10Domains = getDomainsData();
 
   const trafficSource = state.connection_id?.toLowerCase().includes('adobe') ? 'Adobe' : 'GA4';
 
@@ -804,8 +794,7 @@ const App: React.FC = () => {
 
   const mainBrandLabel = tenant?.tenant_name || 'Tu Marca';
   
-  const topicsPR = data?.topics_pr || [];
-  const topicsDigital = data?.topics_digital || [];
+  const topicsRows = [...(data?.topics_pr || []), ...(data?.topics_digital || []), ...(data?.topics_rows || [])];
 
   const totalUniqueDomains = data?.rows ? new Set(data.rows.map((r: any) => r.domain).filter(Boolean)).size : 0;
 
@@ -1094,8 +1083,8 @@ const App: React.FC = () => {
             source={aiSource} 
             options={{ indexAxis: 'y', plugins: { legend: { display: false } } }}
             data={{
-              labels: data?.competitors?.length ? data.competitors.map((c: any) => c.domain || c.name) : ['Sin datos'],
-              datasets: [{ data: data?.competitors?.length ? data.competitors.map((c: any) => c.visibility_score) : [0], backgroundColor: ['#F54963', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
+              labels: data?.competitors?.filter((c: any) => c.classification?.toLowerCase() !== 'owned').slice(0, 5).map((c: any) => c.domain || c.name) || ['Sin datos'],
+              datasets: [{ data: data?.competitors?.filter((c: any) => c.classification?.toLowerCase() !== 'owned').slice(0, 5).map((c: any) => c.visibility_score) || [0], backgroundColor: ['#F54963', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
             }}
           />
           <ChartWidget 
@@ -1104,28 +1093,22 @@ const App: React.FC = () => {
             source={aiSource} 
             options={{ indexAxis: 'y', scales: { x: { min: 5, max: 10 } }, plugins: { legend: { display: false } } }}
             data={{
-              labels: data?.competitors?.length ? data.competitors.map((c: any) => c.domain || c.name) : ['Sin datos'],
-              datasets: [{ data: data?.competitors?.length ? data.competitors.map((c: any) => c.sentiment_score) : [0], backgroundColor: ['#36A7B7', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
+              labels: data?.competitors?.slice(0, 5).map((c: any) => c.domain || c.name) || ['Sin datos'],
+              datasets: [{ data: data?.competitors?.slice(0, 5).map((c: any) => c.sentiment_score) || [0], backgroundColor: ['#36A7B7', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
             }}
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6">
           <TopicsCard 
-            title="Temáticas clave — Comunicación & PR" 
+            title="Temáticas clave — Impacto en IA" 
             source={aiSource}
-            topics={topicsPR}
-          />
-          <TopicsCard 
-            title="Temáticas clave — Digital & Crisis" 
-            source={aiSource}
-            topics={topicsDigital}
+            topics={topicsRows.sort((a,b) => (b.w||0) - (a.w||0)).slice(0, 10)}
           />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <DomainsTable title="Top 10 dominios · gap score (unbranded)" source={aiSource} rows={top10Unbranded} />
-          <DomainsTable title="Top 10 dominios · gap score (branded)" source={aiSource} rows={top10Branded} />
+        <div className="grid grid-cols-1 gap-6">
+          <DomainsTable title="Top 10 dominios de visibilidad" source={aiSource} rows={top10Domains} />
         </div>
           </>
         )}

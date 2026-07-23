@@ -548,8 +548,21 @@ class MCPETLService:
                 
                 # Fetch real property ID instead of hardcoding peec-default
                 peec_props = await peec_service.list_properties()
-                logger.error(f"PEEC PROPS RETRIEVED: {peec_props}")
-                peec_property_id = peec_props[0].name if peec_props else "properties/peec-default"
+                logger.info(f"PEEC PROPS RETRIEVED: {len(peec_props)} projects")
+                
+                matched_prop = None
+                for p in peec_props:
+                    # Logica heuristica para encontrar el proyecto del tenant actual
+                    if "vidal" in p.display_name.lower():
+                        matched_prop = p
+                        break
+                        
+                if matched_prop:
+                    peec_property_id = matched_prop.name
+                    logger.info(f"✅ Proyecto PEEC encontrado para {self.tenant_id}: {p.display_name} ({peec_property_id})")
+                else:
+                    peec_property_id = peec_props[0].name if peec_props else "properties/peec-default"
+                    logger.warning(f"⚠️ No se encontró proyecto específico para {self.tenant_id}, usando default: {peec_property_id}")
                 
                 req = RunReportRequest(
                     property_id=peec_property_id,
@@ -626,7 +639,8 @@ class MCPETLService:
                             "sentiment_score": float(item.get("sentiment_score", 0)),
                             "share_of_voice": float(item.get("share_of_voice", 0)),
                             "company_id": "peec-company",
-                            "property_id": peec_property_id
+                            "property_id": peec_property_id,
+                            "domain_classification": item.get("classification", "Earned")
                         })
                 except Exception as e:
                     logger.error(f"Error extrayendo dominios de Peec.ai: {e}")
@@ -697,7 +711,8 @@ class MCPETLService:
                         "sentiment_score": float(r.get("sentiment_score", 0)),
                         "share_of_voice": float(r.get("share_of_voice", 0)),
                         "company_id": "brandlight-company",
-                        "property_id": "properties/ES"
+                        "property_id": "properties/ES",
+                        "domain_classification": "Earned"
                     })
                     
                 # Extraer temas (new content opportunities) desde Brandlight
