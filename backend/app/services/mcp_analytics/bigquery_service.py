@@ -79,6 +79,12 @@ class BigQueryService:
                     bigquery.SchemaField("copilot_sessions", "INTEGER", mode="NULLABLE"),
                     bigquery.SchemaField("copilot_duration", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("other_ai_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("chatgpt_conversions", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("gemini_conversions", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("perplexity_conversions", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("claude_conversions", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("copilot_conversions", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("other_ai_conversions", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("other_ai_duration", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("engagement_score", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("researcher_sessions", "INTEGER", mode="NULLABLE"),
@@ -331,17 +337,23 @@ class BigQueryService:
                     SUM(total_sessions) as total_sessions,
                     SUM(ai_referred_sessions) as ai_referred,
                     SUM(ai_inferred_sessions) as ai_inferred,
-                    SUM(chatgpt_sessions) as chatgpt_sessions,
+                    SUM(other_ai_sessions) as other_ai_sessions,
+                    SUM(chatgpt_conversions) as chatgpt_conversions,
+                    SUM(gemini_conversions) as gemini_conversions,
+                    SUM(perplexity_conversions) as perplexity_conversions,
+                    SUM(claude_conversions) as claude_conversions,
+                    SUM(copilot_conversions) as copilot_conversions,
+                    SUM(other_ai_conversions) as other_ai_conversions,
                     SUM(chatgpt_duration) as chatgpt_duration,
                     SUM(gemini_sessions) as gemini_sessions,
                     SUM(gemini_duration) as gemini_duration,
                     SUM(perplexity_sessions) as perplexity_sessions,
                     SUM(perplexity_duration) as perplexity_duration,
+                    SUM(chatgpt_sessions) as chatgpt_sessions,
                     SUM(claude_sessions) as claude_sessions,
                     SUM(claude_duration) as claude_duration,
                     SUM(copilot_sessions) as copilot_sessions,
                     SUM(copilot_duration) as copilot_duration,
-                    SUM(other_ai_sessions) as other_ai_sessions,
                     SUM(other_ai_duration) as other_ai_duration,
                     SUM(researcher_sessions) as researcher_sessions,
                     SUM(quick_answer_sessions) as quick_answer_sessions,
@@ -436,6 +448,13 @@ class BigQueryService:
                         "sessions": row_sessions,
                         "ai_referred": row_referred,
                         "ai_inferred": row_inferred,
+                        "other_ai_sessions": row.other_ai_sessions or 0,
+                        "chatgpt_conversions": row.chatgpt_conversions or 0.0,
+                        "gemini_conversions": row.gemini_conversions or 0.0,
+                        "perplexity_conversions": row.perplexity_conversions or 0.0,
+                        "claude_conversions": row.claude_conversions or 0.0,
+                        "copilot_conversions": row.copilot_conversions or 0.0,
+                        "other_ai_conversions": row.other_ai_conversions or 0.0,
                         "chatgpt_sessions": row.chatgpt_sessions or 0,
                         "chatgpt_duration": row.chatgpt_duration or 0.0,
                         "gemini_sessions": row.gemini_sessions or 0,
@@ -503,7 +522,8 @@ class BigQueryService:
                 SELECT 
                     domain,
                     AVG(visibility_score) as avg_visibility,
-                    AVG(sentiment_score) as avg_sentiment
+                    AVG(sentiment_score) as avg_sentiment,
+                    ANY_VALUE(domain_classification) as domain_classification
                 FROM `{self.project_id}.{self.dataset_id}.fact_ai_visibility`
                 WHERE tenant_id = @tenant_id 
                   AND date BETWEEN @start_date AND @end_date
@@ -515,18 +535,21 @@ class BigQueryService:
                 domains_job = self.client.query(query_domains, job_config=job_config)
                 domains_results = list(domains_job.result())
                 
-                # Heurística simple para branded: si el dominio contiene el nombre del tenant
+                # Heurística para branded: si PEEC lo marca como Owned o el nombre de dominio coincide
                 tenant_brand_name = tenant_id.lower().replace("-", "").replace("_", "")
                 
                 domains_list = []
                 for row in domains_results:
                     domain_name = row.domain or "unknown"
-                    is_branded = tenant_brand_name in domain_name.lower().replace("-", "").replace(".", "")
+                    classification = row.domain_classification or "Earned"
+                    
+                    is_branded = (classification.lower() == "owned") or (tenant_brand_name in domain_name.lower().replace("-", "").replace(".", ""))
                     
                     domains_list.append({
                         "domain": domain_name,
                         "visibility_score": round(row.avg_visibility or 0, 1),
                         "sentiment_score": round(row.avg_sentiment or 0, 1),
+                        "classification": "Owned" if is_branded else classification,
                         "is_branded": is_branded
                     })
                 
@@ -545,10 +568,11 @@ class BigQueryService:
                 SELECT 
                     topic,
                     recommendation_strategy,
-                    priority_score
+                    MAX(priority_score) as priority_score
                 FROM `{self.project_id}.{self.dataset_id}.dim_content_recommendations`
                 WHERE tenant_id = @tenant_id
                   AND date BETWEEN @start_date AND @end_date
+                GROUP BY topic, recommendation_strategy
                 ORDER BY priority_score DESC
             """
             

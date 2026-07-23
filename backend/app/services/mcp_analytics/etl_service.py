@@ -278,7 +278,7 @@ class MCPETLService:
                     is_perplexity = "perplexity" in source_val
                     is_claude = "claude" in source_val or "anthropic" in source_val
                     is_copilot = "copilot" in source_val or "bing ai" in source_val
-                    is_other_ai = (not (is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot)) and ("ai" in source_val or "bot" in source_val)
+                    is_other_ai = (not (is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot)) and ("ai-assistant" in source_val or "chat" in source_val)
                     is_referred = is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot or is_other_ai
                     
                     key = f"{ga4_property_id}_all-users_{date_val}"
@@ -293,16 +293,22 @@ class MCPETLService:
                             "ai_inferred_sessions": 0,
                             "chatgpt_sessions": 0,
                             "chatgpt_duration": 0.0,
+                            "chatgpt_conversions": 0.0,
                             "gemini_sessions": 0,
                             "gemini_duration": 0.0,
+                            "gemini_conversions": 0.0,
                             "perplexity_sessions": 0,
                             "perplexity_duration": 0.0,
+                            "perplexity_conversions": 0.0,
                             "claude_sessions": 0,
                             "claude_duration": 0.0,
+                            "claude_conversions": 0.0,
                             "copilot_sessions": 0,
                             "copilot_duration": 0.0,
+                            "copilot_conversions": 0.0,
                             "other_ai_sessions": 0,
                             "other_ai_duration": 0.0,
+                            "other_ai_conversions": 0.0,
                             "researcher_sessions": 0,
                             "quick_answer_sessions": 0,
                             "transactional_sessions": 0,
@@ -337,21 +343,27 @@ class MCPETLService:
                     if is_chatgpt:
                         merged_traffic[key]["chatgpt_sessions"] += sessions_val
                         merged_traffic[key]["chatgpt_duration"] += total_duration_val
+                        merged_traffic[key]["chatgpt_conversions"] += conversions_val
                     elif is_gemini:
                         merged_traffic[key]["gemini_sessions"] += sessions_val
                         merged_traffic[key]["gemini_duration"] += total_duration_val
+                        merged_traffic[key]["gemini_conversions"] += conversions_val
                     elif is_perplexity:
                         merged_traffic[key]["perplexity_sessions"] += sessions_val
                         merged_traffic[key]["perplexity_duration"] += total_duration_val
+                        merged_traffic[key]["perplexity_conversions"] += conversions_val
                     elif is_claude:
                         merged_traffic[key]["claude_sessions"] += sessions_val
                         merged_traffic[key]["claude_duration"] += total_duration_val
+                        merged_traffic[key]["claude_conversions"] += conversions_val
                     elif is_copilot:
                         merged_traffic[key]["copilot_sessions"] += sessions_val
                         merged_traffic[key]["copilot_duration"] += total_duration_val
+                        merged_traffic[key]["copilot_conversions"] += conversions_val
                     elif is_other_ai:
                         merged_traffic[key]["other_ai_sessions"] += sessions_val
                         merged_traffic[key]["other_ai_duration"] += total_duration_val
+                        merged_traffic[key]["other_ai_conversions"] += conversions_val
 
                 from app.services.mcp_analytics.calculation_service import CalculationService
                 for k, stats in merged_traffic.items():
@@ -495,16 +507,22 @@ class MCPETLService:
                                 "ai_inferred_sessions": ai_inferred_val,
                                 "chatgpt_sessions": round(total_sessions_val * engine_ratios.get("chatgpt", 0)),
                                 "chatgpt_duration": engine_durations.get("chatgpt", 0) * round(total_sessions_val * engine_ratios.get("chatgpt", 0)),
+                                "chatgpt_conversions": round(float(r.get("conversions", 0)) * engine_ratios.get("chatgpt", 0), 2),
                                 "gemini_sessions": round(total_sessions_val * engine_ratios.get("gemini", 0)),
                                 "gemini_duration": engine_durations.get("gemini", 0) * round(total_sessions_val * engine_ratios.get("gemini", 0)),
+                                "gemini_conversions": round(float(r.get("conversions", 0)) * engine_ratios.get("gemini", 0), 2),
                                 "perplexity_sessions": round(total_sessions_val * engine_ratios.get("perplexity", 0)),
                                 "perplexity_duration": engine_durations.get("perplexity", 0) * round(total_sessions_val * engine_ratios.get("perplexity", 0)),
+                                "perplexity_conversions": round(float(r.get("conversions", 0)) * engine_ratios.get("perplexity", 0), 2),
                                 "claude_sessions": round(total_sessions_val * engine_ratios.get("claude", 0)),
                                 "claude_duration": engine_durations.get("claude", 0) * round(total_sessions_val * engine_ratios.get("claude", 0)),
+                                "claude_conversions": round(float(r.get("conversions", 0)) * engine_ratios.get("claude", 0), 2),
                                 "copilot_sessions": round(total_sessions_val * engine_ratios.get("copilot", 0)),
                                 "copilot_duration": engine_durations.get("copilot", 0) * round(total_sessions_val * engine_ratios.get("copilot", 0)),
+                                "copilot_conversions": round(float(r.get("conversions", 0)) * engine_ratios.get("copilot", 0), 2),
                                 "other_ai_sessions": round(total_sessions_val * engine_ratios.get("other_ai", 0)),
                                 "other_ai_duration": engine_durations.get("other_ai", 0) * round(total_sessions_val * engine_ratios.get("other_ai", 0)),
+                                "other_ai_conversions": round(float(r.get("conversions", 0)) * engine_ratios.get("other_ai", 0), 2),
                                 "researcher_sessions": round(total_ai_for_day * researcher_ratio),
                                 "quick_answer_sessions": round(total_ai_for_day * quick_answer_ratio),
                             "transactional_sessions": round(total_ai_for_day * transactional_ratio),
@@ -586,17 +604,22 @@ class MCPETLService:
                             "ai_referred_sessions": 0,
                             "ai_inferred_sessions": 0,
                             "chatgpt_sessions": 0,
-                            "chatgpt_duration": 0.0,
+                            "chatgpt_conversions": 0.0,
                             "gemini_sessions": 0,
                             "gemini_duration": 0.0,
+                            "gemini_conversions": 0.0,
                             "perplexity_sessions": 0,
                             "perplexity_duration": 0.0,
+                            "perplexity_conversions": 0.0,
                             "claude_sessions": 0,
                             "claude_duration": 0.0,
+                            "claude_conversions": 0.0,
                             "copilot_sessions": 0,
                             "copilot_duration": 0.0,
+                            "copilot_conversions": 0.0,
                             "other_ai_sessions": 0,
                             "other_ai_duration": 0.0,
+                            "other_ai_conversions": 0.0,
                             "researcher_sessions": 0,
                             "quick_answer_sessions": 0,
                             "transactional_sessions": 0,

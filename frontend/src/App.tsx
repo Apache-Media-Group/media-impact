@@ -749,11 +749,11 @@ const App: React.FC = () => {
 
     if (data && data.rows) {
       data.rows.forEach((r: any) => {
-        const eng = parseFloat((r.conversions || r.engagement_score || '0').toString());
-        
-        const processEngine = (name: string, sessionKey: string, durationKey: string) => {
+        const processEngine = (name: string, sessionKey: string, durationKey: string, convKey: string) => {
           const sess = parseInt((r[sessionKey] || '0').toString(), 10);
           const dur = parseFloat((r[durationKey] || '0').toString());
+          const eng = parseFloat((r[convKey] || '0').toString());
+          
           if (sess > 0) {
             motors[name].sessions += sess;
             motors[name].conversions += eng;
@@ -762,17 +762,17 @@ const App: React.FC = () => {
           }
         };
 
-        processEngine('ChatGPT', 'chatgpt_sessions', 'chatgpt_duration');
-        processEngine('Gemini', 'gemini_sessions', 'gemini_duration');
-        processEngine('Perplexity', 'perplexity_sessions', 'perplexity_duration');
-        processEngine('Claude', 'claude_sessions', 'claude_duration');
-        processEngine('Copilot', 'copilot_sessions', 'copilot_duration');
-        processEngine('Otros', 'other_ai_sessions', 'other_ai_duration');
+        processEngine('ChatGPT', 'chatgpt_sessions', 'chatgpt_duration', 'chatgpt_conversions');
+        processEngine('Gemini', 'gemini_sessions', 'gemini_duration', 'gemini_conversions');
+        processEngine('Perplexity', 'perplexity_sessions', 'perplexity_duration', 'perplexity_conversions');
+        processEngine('Claude', 'claude_sessions', 'claude_duration', 'claude_conversions');
+        processEngine('Copilot', 'copilot_sessions', 'copilot_duration', 'copilot_conversions');
+        processEngine('Otros', 'other_ai_sessions', 'other_ai_duration', 'other_ai_conversions');
       });
     }
     
     return Object.keys(motors)
-      .filter(m => motors[m].sessions > 0 || motors[m].count > 0 || m !== 'Otros')
+      .filter(m => (motors[m].sessions > 0 || motors[m].count > 0) && (m !== 'Otros' || (motors[m].conversions > 0 || motors[m].sessions > 50)))
       .map(m => {
         const avgSecs = motors[m].sessions > 0 ? Math.round(motors[m].totalDuration / motors[m].sessions) : 0;
         const mins = Math.floor(avgSecs / 60);
