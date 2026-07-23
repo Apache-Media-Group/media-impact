@@ -34,7 +34,7 @@ export const DomainsTable: React.FC<DomainsTableProps> = ({ title, rows, source 
           </tr>
         </thead>
         <tbody className="divide-y divide-dashboard-border">
-          {rows.map((r, i) => (
+          {rows.length > 0 ? rows.map((r, i) => (
             <tr key={i} className="hover:bg-dashboard-bg/20 transition-colors">
               <td className="px-5 py-2.5 text-xs font-medium text-navy">{r.d}</td>
               <td className="px-5 py-2.5 text-xs text-mid text-right">{r.m}</td>
@@ -42,7 +42,9 @@ export const DomainsTable: React.FC<DomainsTableProps> = ({ title, rows, source 
                 {r.g >= 0 ? `+${r.g}` : r.g}
               </td>
             </tr>
-          ))}
+          )) : (
+            <tr><td colSpan={3} className="px-5 py-8 text-center text-mid text-xs italic">Sin datos de dominios para este periodo</td></tr>
+          )}
         </tbody>
       </table>
     </div>

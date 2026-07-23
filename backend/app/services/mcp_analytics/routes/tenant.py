@@ -2,8 +2,9 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Request, Query, HTTPException, Depends
+from fastapi import APIRouter, Request, Query, HTTPException, Depends, Response
 from pydantic import BaseModel
+import urllib.request
 
 from app.services.auth_utils import TokenManager
 from app.services.auth_middleware import get_current_user, verify_tenant_access
@@ -78,7 +79,25 @@ async def get_tenant_config(request: Request, tenant: Optional[str] = Query(None
             detail=f"Organización '{detected_tenant}' no registrada en la plataforma analítica de LLYC."
         )
         
+        
     return config
+
+
+@router.get("/tenant/proxy-logo")
+async def proxy_logo(url: str = Query(..., description="URL of the logo to proxy")):
+    """
+    Proxies an external logo image so that the frontend canvas (html2canvas)
+    can render it without CORS tainting issues.
+    """
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req) as response:
+            content = response.read()
+            content_type = response.headers.get("Content-Type", "image/png")
+            return Response(content=content, media_type=content_type)
+    except Exception as e:
+        logger.error(f"Error proxying logo from {url}: {e}")
+        raise HTTPException(status_code=400, detail="Could not proxy logo image")
 
 
 class OTPSendRequest(BaseModel):

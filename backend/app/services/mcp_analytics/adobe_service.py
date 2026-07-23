@@ -503,44 +503,35 @@ class AdobeAnalyticsService(AnalyticsService):
             b_df = ai_df.groupby('ai_platform').agg({'sessions': 'sum', 'avg_duration': 'mean', 'pages_per_session': 'mean', 'conversions': 'sum'}).reset_index()
             for _, r in b_df.iterrows():
                 sess = int(r['sessions'])
-                
-                # Umbral mínimo de 10 sesiones
-                if sess < 10:
-                    battle_of_ais.append({
-                        "platform": r['ai_platform'], 
-                        "sessions": sess, 
-                        "avg_duration": "N/A", 
-                        "pages_per_session": 0, 
-                        "conversions": int(r['conversions']),
-                        "conversion_rate": "0%", 
-                        "engagement_score": 0,
-                        "relative_ratio": 0,
-                        "ratio_label": "N/A — muestra insuficiente"
-                    })
-                    continue
-
                 avg_dur_sec = int(r['avg_duration'])
                 # Score centralizado y Ratio Relativo
                 sniper = CalculationService.calculate_sniper_score(r['conversions'], avg_dur_sec, r['pages_per_session'])
                 relative_ratio = round(sniper / s_baseline, 2) if s_baseline > 0 else 1.0
                 
-                ratio_label = "intención similar a la media"
-                if relative_ratio >= 1.30: ratio_label = "intención 30% superior a la media"
-                elif relative_ratio >= 1.10: ratio_label = "intención por encima de la media"
-                elif relative_ratio < 0.90: ratio_label = "intención por debajo de la media"
+                if sess < 10:
+                    ratio_label = "N/A — muestra insuficiente"
+                else:
+                    ratio_label = "intención similar a la media"
+                    if relative_ratio >= 1.30: ratio_label = "intención 30% superior a la media"
+                    elif relative_ratio >= 1.10: ratio_label = "intención por encima de la media"
+                    elif relative_ratio < 0.90: ratio_label = "intención por debajo de la media"
 
                 m, s = divmod(avg_dur_sec, 60)
                 dur_str = f"{m:02d}:{s:02d}" if avg_dur_sec >= 60 else f"{avg_dur_sec}s"
+                
+                final_label = ratio_label if sess < 10 else f"{relative_ratio}x — {ratio_label}"
+                
                 battle_of_ais.append({
                     "platform": r['ai_platform'], 
                     "sessions": sess, 
                     "avg_duration": dur_str, 
+                    "raw_avg_duration_sec": avg_dur_sec,
                     "pages_per_session": round(float(r['pages_per_session']), 2), 
                     "conversions": int(r['conversions']),
                     "conversion_rate": f"{round((r['conversions']/sess*100), 2)}%", 
                     "engagement_score": sniper,
                     "relative_ratio": relative_ratio,
-                    "ratio_label": f"{relative_ratio}x — {ratio_label}"
+                    "ratio_label": final_label
                 })
         
         # Force exact match between Battle of AIs table and KPI cards

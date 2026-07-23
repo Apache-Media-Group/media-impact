@@ -264,7 +264,8 @@ class BrandlightService(AnalyticsService):
                                 "date": report_date,
                                 "domain": domain_name,
                                 "visibility_score": str(v_score) if v_score is not None else "0.0",
-                                "sentiment_score": str(s_score)
+                                "sentiment_score": str(s_score),
+                                "engine": s.get("engine") or s.get("aiEngine") or "Global AI"
                             })
                 
         except Exception as e:
@@ -285,6 +286,48 @@ class BrandlightService(AnalyticsService):
                 "period": f"{start_date} a {end_date}"
             }
         )
+
+    async def fetch_topics(self, property_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+        """
+        Extrae las oportunidades de contenido (topics) desde Brandlight usando el nuevo endpoint.
+        """
+        brand_name = self.tenant_id
+        try:
+            brands = await self.list_accounts()
+            brand_ids = [b.account_id for b in brands]
+            if brand_name not in brand_ids and brands:
+                brand_name = brands[0].account_id
+        except Exception as e:
+            logger.warning(f"Error al verificar marca de Brandlight para topics: {e}")
+
+        topics = []
+        try:
+            res_topics = await self._request("GET", f"/brands/{brand_name}/recommendations/new-content-opportunities")
+            
+            # Iterar si es una lista o extraer directamente si es un diccionario
+            categories = res_topics if isinstance(res_topics, list) else [res_topics]
+            
+            for cat_obj in categories:
+                if not isinstance(cat_obj, dict): continue
+                recs = cat_obj.get("recommendations", [])
+                category = cat_obj.get("categoryName", "General")
+                for item in recs:
+                    topic_name = item.get("topicName")
+                    if topic_name:
+                        topics.append({
+                            "topic": topic_name,
+                            "category": category,
+                            "priority": item.get("priority", "MEDIUM"),
+                            "volume": 0 # Brandlight no entrega volumen explícito aquí
+                        })
+                            
+        except Exception as e:
+            if "404" in str(e):
+                logger.warning(f"Brandlight /recommendations/new-content-opportunities devolvió 404 para {brand_name}")
+            else:
+                logger.error(f"Error extrayendo topics de Brandlight: {e}")
+                
+        return topics[:limit]
 
     async def get_metadata(self, property_id: str) -> Dict[str, Any]:
         """

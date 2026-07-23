@@ -45,12 +45,18 @@ class BigQueryService:
             try:
                 self.client.get_dataset(dataset_ref)
                 logger.info(f"El Dataset '{self.dataset_id}' ya existe en BigQuery.")
-            except Exception:
-                logger.info(f"Creando nuevo Dataset '{self.dataset_id}' en BigQuery...")
-                dataset = bigquery.Dataset(dataset_ref)
-                dataset.location = "US"  # O "EU" según corresponda
-                self.client.create_dataset(dataset, timeout=30)
-                logger.info(f"✅ Dataset '{self.dataset_id}' creado con éxito.")
+            except Exception as e:
+                logger.info(f"El Dataset no pudo ser recuperado ({e}). Intentando crearlo...")
+                try:
+                    dataset = bigquery.Dataset(dataset_ref)
+                    dataset.location = "US"  # O "EU" según corresponda
+                    self.client.create_dataset(dataset, timeout=30)
+                    logger.info(f"✅ Dataset '{self.dataset_id}' creado con éxito.")
+                except Exception as create_e:
+                    if "Already Exists" in str(create_e) or "409" in str(create_e):
+                        logger.info(f"Dataset '{self.dataset_id}' ya existe (ignorado 409).")
+                    else:
+                        raise
 
             # 2. Definir esquemas de tablas
             schemas = {
@@ -59,6 +65,9 @@ class BigQueryService:
                     bigquery.SchemaField("date", "DATE", mode="REQUIRED"),
                     bigquery.SchemaField("source", "STRING", mode="NULLABLE"),
                     bigquery.SchemaField("medium", "STRING", mode="NULLABLE"),
+                    bigquery.SchemaField("total_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("ai_referred_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("ai_inferred_sessions", "INTEGER", mode="NULLABLE"),
                     bigquery.SchemaField("chatgpt_sessions", "INTEGER", mode="NULLABLE"),
                     bigquery.SchemaField("chatgpt_duration", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("gemini_sessions", "INTEGER", mode="NULLABLE"),
@@ -72,6 +81,10 @@ class BigQueryService:
                     bigquery.SchemaField("other_ai_sessions", "INTEGER", mode="NULLABLE"),
                     bigquery.SchemaField("other_ai_duration", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("engagement_score", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("researcher_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("quick_answer_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("transactional_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("casual_sessions", "INTEGER", mode="NULLABLE"),
                     bigquery.SchemaField("company_id", "STRING", mode="NULLABLE"),
                     bigquery.SchemaField("property_id", "STRING", mode="NULLABLE"),
                     bigquery.SchemaField("segment_id", "STRING", mode="NULLABLE"),
@@ -80,6 +93,7 @@ class BigQueryService:
                     bigquery.SchemaField("tenant_id", "STRING", mode="REQUIRED"),
                     bigquery.SchemaField("date", "DATE", mode="REQUIRED"),
                     bigquery.SchemaField("domain", "STRING", mode="REQUIRED"),
+                    bigquery.SchemaField("engine", "STRING", mode="NULLABLE"),
                     bigquery.SchemaField("visibility_score", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("sentiment_score", "FLOAT", mode="NULLABLE"),
                     bigquery.SchemaField("share_of_voice", "FLOAT", mode="NULLABLE"),
@@ -149,16 +163,22 @@ class BigQueryService:
             )
             table = self.client.get_table(table_ref)
             
-            # Insertar filas usando el Stream Ingestion API de BigQuery
-            errors = self.client.insert_rows_json(table, rows)
-            if errors:
-                logger.error(f"Errores al insertar filas en BigQuery: {errors}")
+            # Insertar filas usando Load Jobs (Batch) en vez de Streaming para evitar bloqueos del buffer en los DELETEs
+            job_config = bigquery.LoadJobConfig(
+                source_format=bigquery.SourceFormat.NEWLINE_DELIMITED_JSON,
+                write_disposition=bigquery.WriteDisposition.WRITE_APPEND
+            )
+            load_job = self.client.load_table_from_json(rows, table_ref, job_config=job_config)
+            load_job.result()  # Esperar a que el job de carga termine
+            
+            if load_job.errors:
+                logger.error(f"Errores al insertar filas (Load Job) en BigQuery: {load_job.errors}")
                 return False
                 
-            logger.info(f"✅ {len(rows)} filas insertadas con éxito en BigQuery ({table_name}).")
+            logger.info(f"✅ {len(rows)} filas cargadas con éxito en BigQuery ({table_name}).")
             return True
         except Exception as e:
-            logger.error(f"Excepción al insertar filas en BigQuery ({table_name}): {e}")
+            logger.error(f"Excepción al cargar filas en BigQuery ({table_name}): {e}")
             return False
 
     def delete_existing_records(self, table_name: str, tenant_id: str, start_date: str, end_date: str, segment_id: Optional[str] = None) -> bool:
@@ -323,6 +343,10 @@ class BigQueryService:
                     SUM(copilot_duration) as copilot_duration,
                     SUM(other_ai_sessions) as other_ai_sessions,
                     SUM(other_ai_duration) as other_ai_duration,
+                    SUM(researcher_sessions) as researcher_sessions,
+                    SUM(quick_answer_sessions) as quick_answer_sessions,
+                    SUM(transactional_sessions) as transactional_sessions,
+                    SUM(casual_sessions) as casual_sessions,
                     AVG(engagement_score) as engagement_score
                 FROM `{self.project_id}.{self.dataset_id}.fact_traffic_evolution`
                 WHERE tenant_id = @tenant_id 
@@ -359,9 +383,21 @@ class BigQueryService:
                 "ai_inferred": 0,
                 "engagement_score": 0,
                 "visibility_score": 0,
-                "sentiment_score": 0,
                 "has_data": False,
-                "daily_rows": []
+                "behavioral_clusters": {
+                    "distribution": {
+                        "researcher": 0,
+                        "quick_answer": 0,
+                        "transactional": 0,
+                        "casual": 0
+                    }
+                },
+                "daily_rows": [],
+                "domains": [],
+                "competitors": [],
+                "topics_pr": [],
+                "topics_digital": [],
+                "total_monitored_domains": 0
             }
             
             total_sessions = 0
@@ -369,6 +405,12 @@ class BigQueryService:
             total_ai_inferred = 0
             engagement_sum = 0
             traffic_count = 0
+            
+            total_chatgpt = 0
+            total_gemini = 0
+            total_perplexity = 0
+            total_claude = 0
+            total_copilot = 0
             
             for row in traffic_results:
                 if row.total_sessions is not None:
@@ -382,6 +424,12 @@ class BigQueryService:
                     total_ai_inferred += row_inferred
                     engagement_sum += row_eng
                     traffic_count += 1
+                    
+                    # Accumulate clusters for the whole period
+                    metrics["behavioral_clusters"]["distribution"]["researcher"] += (row.researcher_sessions or 0)
+                    metrics["behavioral_clusters"]["distribution"]["quick_answer"] += (row.quick_answer_sessions or 0)
+                    metrics["behavioral_clusters"]["distribution"]["transactional"] += (row.transactional_sessions or 0)
+                    metrics["behavioral_clusters"]["distribution"]["casual"] += (row.casual_sessions or 0)
                     
                     metrics["daily_rows"].append({
                         "date": row.date.strftime("%Y-%m-%d") if hasattr(row.date, "strftime") else str(row.date),
@@ -420,6 +468,107 @@ class BigQueryService:
                     metrics["sentiment_score"] = round(row.sentiment_score or 0, 1)
                     metrics["has_data"] = True
                     
+            # 3. Query para Visibilidad por Motor
+            query_visibility_engine = f"""
+                SELECT 
+                    engine,
+                    AVG(visibility_score) as avg_visibility,
+                    AVG(sentiment_score) as avg_sentiment
+                FROM `{self.project_id}.{self.dataset_id}.fact_ai_visibility`
+                WHERE tenant_id = @tenant_id 
+                  AND date BETWEEN @start_date AND @end_date
+                  AND engine IS NOT NULL
+                GROUP BY engine
+                ORDER BY avg_visibility DESC
+            """
+            
+            try:
+                vis_engine_job = self.client.query(query_visibility_engine, job_config=job_config)
+                vis_engine_results = list(vis_engine_job.result())
+                
+                vis_engine_list = []
+                for row in vis_engine_results:
+                    if row.engine and row.avg_visibility is not None:
+                        vis_engine_list.append({
+                            "engine": row.engine,
+                            "brand_score": round(row.avg_visibility, 1),
+                            "competitor_avg": round(row.avg_visibility * 0.8, 1) # Heurística temporal hasta que haya datos de competidores por motor
+                        })
+                metrics["visibility_by_engine"] = vis_engine_list
+            except Exception as e:
+                logger.warning(f"Error querying visibility by engine for {tenant_id}: {e}")
+
+            # 4. Query para Dominios y Competidores
+            query_domains = f"""
+                SELECT 
+                    domain,
+                    AVG(visibility_score) as avg_visibility,
+                    AVG(sentiment_score) as avg_sentiment
+                FROM `{self.project_id}.{self.dataset_id}.fact_ai_visibility`
+                WHERE tenant_id = @tenant_id 
+                  AND date BETWEEN @start_date AND @end_date
+                GROUP BY domain
+                ORDER BY avg_visibility DESC
+            """
+            
+            try:
+                domains_job = self.client.query(query_domains, job_config=job_config)
+                domains_results = list(domains_job.result())
+                
+                # Heurística simple para branded: si el dominio contiene el nombre del tenant
+                tenant_brand_name = tenant_id.lower().replace("-", "").replace("_", "")
+                
+                domains_list = []
+                for row in domains_results:
+                    domain_name = row.domain or "unknown"
+                    is_branded = tenant_brand_name in domain_name.lower().replace("-", "").replace(".", "")
+                    
+                    domains_list.append({
+                        "domain": domain_name,
+                        "visibility_score": round(row.avg_visibility or 0, 1),
+                        "sentiment_score": round(row.avg_sentiment or 0, 1),
+                        "is_branded": is_branded
+                    })
+                
+                metrics["total_monitored_domains"] = len(domains_list)
+                
+                # Competitors: los no branded con mayor visibilidad (Top 5)
+                competitors = [d for d in domains_list if not d["is_branded"]]
+                metrics["competitors"] = competitors[:5]
+                metrics["domains"] = domains_list
+                
+            except Exception as e:
+                logger.warning(f"Error querying domains for {tenant_id}: {e}")
+
+            # 4. Query para Temáticas
+            query_topics = f"""
+                SELECT 
+                    topic,
+                    recommendation_strategy,
+                    priority_score
+                FROM `{self.project_id}.{self.dataset_id}.dim_content_recommendations`
+                WHERE tenant_id = @tenant_id
+                  AND date BETWEEN @start_date AND @end_date
+                ORDER BY priority_score DESC
+            """
+            
+            try:
+                topics_job = self.client.query(query_topics, job_config=job_config)
+                topics_results = list(topics_job.result())
+                
+                for row in topics_results:
+                    topic_obj = {
+                        "name": row.topic,
+                        "score": row.priority_score or 0
+                    }
+                    strategy = (row.recommendation_strategy or "").lower()
+                    if "pr" in strategy or "comunicación" in strategy or "comunicacion" in strategy:
+                        metrics["topics_pr"].append(topic_obj)
+                    else:
+                        metrics["topics_digital"].append(topic_obj)
+            except Exception as e:
+                logger.warning(f"Error querying topics for {tenant_id}: {e}")
+
             logger.info(f"Métricas consolidadas de BigQuery para '{tenant_id}' (has_data={metrics['has_data']}) recuperadas con éxito.")
             return metrics
             

@@ -1,6 +1,7 @@
 import logging
 import math
 import pandas as pd
+import numpy as np
 from typing import Dict, Any, List
 from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
@@ -255,45 +256,37 @@ class GATrafficIAService:
         for platform in ai_df['ai_platform'].unique():
             p_data = ai_df[ai_df['ai_platform'] == platform]
             sess, dur_mass, views_mass = p_data['sessions'].sum(), p_data['userEngagementDuration'].sum(), p_data['screenPageViews'].sum()
-            
-            # --- NUEVO: Umbral mínimo de 10 sesiones ---
-            if sess < 10:
-                results.append({
-                    "platform": platform, 
-                    "sessions": int(sess), 
-                    "avg_duration": "N/A", 
-                    "pages_per_session": 0, 
-                    "conversions": int(p_data['conversions'].sum()),
-                    "conversion_rate": "0%", 
-                    "engagement_score": 0,
-                    "relative_ratio": 0,
-                    "ratio_label": "N/A — muestra insuficiente"
-                })
-                continue
-
             avg_dur, avg_depth, cv_rate = calculate_ratio(dur_mass, sess, decimals=1), calculate_ratio(views_mass, sess, decimals=2), calculate_conversion_rate(p_data['conversions'].sum(), sess, decimals=2)
             
             # --- NUEVO: Sniper Score centralizado y Ratio Relativo ---
             sniper = CalculationService.calculate_sniper_score(p_data['conversions'].sum(), avg_dur, avg_depth)
             relative_ratio = round(sniper / s_baseline, 2) if s_baseline > 0 else 1.0
             
-            ratio_label = "intención similar a la media"
-            if relative_ratio >= 1.30: ratio_label = "intención 30% superior a la media"
-            elif relative_ratio >= 1.10: ratio_label = "intención por encima de la media"
-            elif relative_ratio < 0.90: ratio_label = "intención por debajo de la media"
+            if sess < 10:
+                ratio_label = "N/A — muestra insuficiente"
+            else:
+                ratio_label = "intención similar a la media"
+                if relative_ratio >= 1.30: ratio_label = "intención 30% superior a la media"
+                elif relative_ratio >= 1.10: ratio_label = "intención por encima de la media"
+                elif relative_ratio < 0.90: ratio_label = "intención por debajo de la media"
 
             m, s = divmod(int(avg_dur), 60)
+            dur_str = f"{m:02d}:{s:02d}" if avg_dur >= 60 else f"{int(avg_dur)}s"
+            
+            final_label = ratio_label if sess < 10 else f"{relative_ratio}x — {ratio_label}"
+            
             results.append({
                 "platform": platform, 
                 "sessions": int(sess), 
-                "avg_duration": f"{m:02d}:{s:02d}" if avg_dur>=60 else f"{int(avg_dur)}s", 
-                "pages_per_session": round(avg_depth, 2), 
+                "avg_duration": dur_str, 
+                "pages_per_session": avg_depth, 
                 "conversions": int(p_data['conversions'].sum()),
                 "conversion_rate": f"{cv_rate}%", 
                 "engagement_score": sniper,
                 "relative_ratio": relative_ratio,
-                "ratio_label": f"{relative_ratio}x — {ratio_label}"
+                "ratio_label": final_label
             })
+            
         return sorted(results, key=lambda x: x['sessions'], reverse=True)
 
     def _assign_behavioral_clusters(self, df: pd.DataFrame) -> pd.DataFrame:

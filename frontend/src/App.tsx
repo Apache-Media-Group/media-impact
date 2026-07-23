@@ -13,7 +13,7 @@ import { useAnalytics } from './hooks/useAnalytics';
 import { AdminPanel } from './components/AdminPanel';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
-import { Database } from 'lucide-react';
+import { Database, X } from 'lucide-react';
 import { secureFetch, API_BASE_URL } from './services/apiClient';
 
 // CI Trigger: Rebuild to inject new Firebase secrets
@@ -78,6 +78,8 @@ const App: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const [isAdminView, setIsAdminView] = useState(false);
+  const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
+  const [showFormulas, setShowFormulas] = useState(false);
   
   // Estados de autenticación seguros y verificados por Firebase SDK
   const [adminUserEmail, setAdminUserEmail] = useState<string | null>(null);
@@ -455,13 +457,13 @@ const App: React.FC = () => {
         } else if (tenantParam === 'vidal' || tenantParam === 'vidal-y-vidal') {
           // Fallback para testing local
           const vidalMock: TenantConfig = {
-            tenant_id: 'vidal',
+            tenant_id: 'vidal-vidal',
             tenant_name: 'Vidal & Vidal',
-            logo_url: 'https://vidal-vidal.com/cdn/shop/files/Logo_Vidal_Vidal.png?v=1614343118',
+            logo_url: 'https://storage.googleapis.com/llyc-mcp-public-assets/logos/vidal-vidal.png',
             primary_color: '#000000',
-            secondary_color: '#36A7B7',
+            secondary_color: '#E51D24',
             font_family: 'Montserrat, sans-serif',
-            support_email: 'support@vidal.com'
+            support_email: 'support@vidal-vidal.com'
           };
           setTenant(vidalMock);
           updateState({ tenant_id: vidalMock.tenant_id });
@@ -690,68 +692,40 @@ const App: React.FC = () => {
   }
 
   const aiSource = connections.some(c => c.platform === 'PEEC') ? 'PEEC' : 'BL';
-  const isVidal = tenant?.tenant_id?.toLowerCase().includes('vidal');
 
   // Obtener dominios unbranded / branded dinámicamente desde BigQuery
-  const getDomainsList = () => {
-    let domainMap: { [key: string]: { visibility: number, count: number } } = {};
-    if (data && data.rows) {
-      data.rows.forEach((r: any) => {
-        const dom = r.domain;
-        if (dom) {
-          if (!domainMap[dom]) {
-            domainMap[dom] = { visibility: 0, count: 0 };
-          }
-          domainMap[dom].visibility += parseFloat(r.visibility_score || '0');
-          domainMap[dom].count += 1;
+  const getDomainsData = () => {
+    let brandedList: any[] = [];
+    let unbrandedList: any[] = [];
+    
+    if (data && data.domains) {
+      data.domains.forEach((d: any) => {
+        const formatted = {
+          d: d.domain,
+          m: '-', // Menciones reales pueden venir después, por ahora mostramos guión o un proxy
+          g: d.visibility_score
+        };
+        if (d.is_branded) {
+          brandedList.push(formatted);
+        } else {
+          unbrandedList.push(formatted);
         }
       });
     }
     
-    let list = Object.keys(domainMap).map(d => ({
-      d,
-      m: domainMap[d].count, // Menciones reales
-      g: Math.round(domainMap[d].visibility / domainMap[d].count) // Score de visibilidad real
-    })).sort((a, b) => b.m - a.m); // Ordenar por menciones descendente
-    
-    if (list.length === 0) {
-      if (isVidal) {
-        list = [
-          { d: 'vogue.es', m: 342, g: 85 },
-          { d: 'elle.com', m: 215, g: 78 },
-          { d: 'telva.com', m: 189, g: 72 },
-          { d: 'marie-claire.es', m: 145, g: 68 },
-          { d: 'hola.com', m: 112, g: 65 },
-          { d: 'woman.es', m: 98, g: 60 },
-          { d: 'cosmopolitan.com', m: 87, g: 55 },
-          { d: 'instyle.es', m: 76, g: 50 },
-          { d: 'glamour.es', m: 65, g: 45 },
-          { d: 'harpersbazaar.com', m: 54, g: 40 }
-        ];
-      } else {
-        list = [
-          { d: 'expansion.com', m: 450, g: 82 },
-          { d: 'cincodias.com', m: 320, g: 75 },
-          { d: 'elconfidencial.com', m: 280, g: 70 },
-          { d: 'eleconomista.es', m: 210, g: 65 },
-          { d: 'elpais.com', m: 190, g: 60 },
-          { d: 'elmundo.es', m: 150, g: 55 },
-          { d: 'dircomfidencial.com', m: 120, g: 50 },
-          { d: 'prnoticias.com', m: 90, g: 45 },
-          { d: 'reasonwhy.es', m: 70, g: 40 },
-          { d: 'marketingdirecto.com', m: 50, g: 35 }
-        ];
-      }
-    }
-    return list;
+    return {
+      branded: brandedList.sort((a, b) => b.g - a.g),
+      unbranded: unbrandedList.sort((a, b) => b.g - a.g)
+    };
   };
 
-  const dynamicDomains = getDomainsList();
-  const top10Unbranded = dynamicDomains.slice(0, 10);
-  const top10Branded = dynamicDomains.slice(0, 10);
+  const domainsData = getDomainsData();
+  const top10Unbranded = domainsData.unbranded.slice(0, 10);
+  const top10Branded = domainsData.branded.slice(0, 10);
 
   const trafficSource = state.connection_id?.toLowerCase().includes('adobe') ? 'Adobe' : 'GA4';
 
+  // Valores base (sin maquillaje estático)
   let aiReferredVal = parseInt((data?.ai_referred || 0).toString(), 10);
   let aiInferredVal = parseInt((data?.ai_inferred || 0).toString(), 10);
   let totalSessVal = parseInt((data?.total_sessions || 0).toString(), 10);
@@ -759,16 +733,6 @@ const App: React.FC = () => {
   let engScoreVal = parseFloat((data?.engagement_score || 0).toString());
   let visScoreVal = parseFloat((data?.visibility_score || 0).toString());
   let sentScoreVal = parseFloat((data?.sentiment_score || 0).toString());
-
-  // Vidal mocks si la data viene vacía o en ceros desde BQ para que la demo no se vea rota
-  if (isVidal) {
-    if (totalSessVal === 0) totalSessVal = 142300;
-    if (aiReferredVal === 0) aiReferredVal = 12450;
-    if (aiInferredVal === 0) aiInferredVal = 8320;
-    if (engScoreVal === 0) engScoreVal = 68.5;
-    if (visScoreVal === 0) visScoreVal = 42.3;
-    if (sentScoreVal === 0) sentScoreVal = 7.4;
-  }
 
   // Reverting mathematical overrides
   if (aiReferredVal + aiInferredVal > totalSessVal) {
@@ -838,33 +802,17 @@ const App: React.FC = () => {
   
   const motorRows = getMotorRows();
 
-  const brandLabels = isVidal ? ['Vidal & Vidal', 'Pandora', 'Tous', 'Aristocrazy', 'PdPaola'] : ['LLYC', 'Weber', 'Edelman', 'FTI', 'Brunswick'];
-  const mainBrandLabel = isVidal ? 'Vidal & Vidal' : 'LLYC';
+  const mainBrandLabel = tenant?.tenant_name || 'Tu Marca';
   
-  const topicsPR = isVidal 
-    ? [
-        {l:'Joyas de plata',w:91},{l:'Anillos y pendientes',w:78},
-        {l:'Tendencias moda',w:65},{l:'Regalos mujer',w:54},{l:'Joyas artesanales',w:42}
-      ]
-    : [
-        {l:'Reputación corporativa',w:91},{l:'Comunicación de crisis',w:78},
-        {l:'Relaciones con medios',w:65},{l:'ESG & sostenibilidad',w:54},{l:'Comunicación interna',w:42}
-      ];
+  const topicsPR = data?.topics_pr || [];
+  const topicsDigital = data?.topics_digital || [];
 
-  const topicsDigital = isVidal
-    ? [
-        {l:'Joyería online',w:88},{l:'Diseño exclusivo',w:82},
-        {l:'Sostenibilidad',w:71},{l:'Influencers moda',w:60},{l:'Materiales premium',w:38}
-      ]
-    : [
-        {l:'Transformación digital',w:88},{l:'IA generativa',w:82},
-        {l:'Gestión de crisis online',w:71},{l:'Social media strategy',w:60},{l:'Influencer relations',w:38}
-      ];
+  const totalUniqueDomains = data?.rows ? new Set(data.rows.map((r: any) => r.domain).filter(Boolean)).size : 0;
 
   const getProxiedLogoUrl = (url: string) => {
     if (!url) return '';
     if (url.startsWith('/')) return `${import.meta.env.BASE_URL || '/'}${url.substring(1)}`;
-    return `/api/v1/mcp-analytics/tenant/proxy-logo?url=${encodeURIComponent(url)}`;
+    return `${API_BASE_URL}/api/v1/mcp-analytics/tenant/proxy-logo?url=${encodeURIComponent(url)}`;
   };
 
   return (
@@ -933,14 +881,14 @@ const App: React.FC = () => {
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-          <KpiCard label="Sesiones totales" tooltip="Volumen total de tráfico recibido en el sitio web (incluyendo canales como orgánico, directo, pagado, referido, etc.)." value={totalSessVal.toLocaleString('es-ES')} suffix="" trend={data?.total_sessions !== undefined ? "+12.3%" : ""} source={trafficSource} />
-          <KpiCard label="IA referida" tooltip="Sesiones de usuarios que han hecho clic en un enlace de tu marca directamente desde la interfaz de un motor de IA generativa (ej. citas en ChatGPT, Perplexity, etc.)." value={aiReferredVal.toLocaleString('es-ES')} suffix="" trend={data?.ai_referred !== undefined ? "+34.1%" : ""} source={trafficSource} />
-          <KpiCard label="IA inferida" tooltip="Tráfico orgánico o directo que nuestro algoritmo ha identificado como altamente probable de provenir de respuestas copiadas y pegadas de una IA generativa." value={aiInferredVal.toLocaleString('es-ES')} suffix="" trend={data?.ai_inferred !== undefined ? "+21.7%" : ""} source={trafficSource} />
-          <KpiCard label="Engagement IA" tooltip="Calificación de 0 a 100 que evalúa la calidad y profundidad del comportamiento en la web del tráfico proveniente de la IA (considera conversiones, tiempo en página y páginas por sesión)." value={engScoreVal} suffix={data?.engagement_score !== undefined ? "/100" : ""} trend={data?.engagement_score !== undefined ? "+8 pts" : ""} source={trafficSource} />
-          <KpiCard label="Visibilidad unbranded" tooltip="Share of Voice estimado de la marca dentro de los motores de IA cuando los usuarios realizan consultas genéricas del sector sin mencionar la marca explícitamente." value={visScoreVal} suffix={data?.visibility_score !== undefined ? "%" : ""} trend={data?.visibility_score !== undefined ? "+5 pts" : ""} source={aiSource} colorClass="!bg-teal-light/20 border-teal/20" />
-          <KpiCard label="Score sentimiento" tooltip="Puntuación promedio de 0 a 10 que evalúa qué tan positivas, neutrales o negativas son las menciones de la marca dentro de las respuestas de IA." value={sentScoreVal} suffix={data?.sentiment_score !== undefined ? "/10" : ""} trend={data?.sentiment_score !== undefined ? "+0.4" : ""} source={aiSource} />
-          <KpiCard label="Modelos analizados" tooltip="Cantidad total de modelos y motores conversacionales de IA que el sistema está monitorizando." value={data ? "5" : "--"} trend={data ? "GPT · Gemini · Perplexity..." : ""} source={aiSource} />
-          <KpiCard label="Dominios monitorizados" tooltip="Volumen de fuentes de información y dominios web (medios, foros, wikis) que están siendo indexados y usados por los motores de IA para generar sus respuestas." value={data ? (isVidal ? "847" : "1,204") : "--"} trend={data ? "+23 nuevos" : ""} source={aiSource} />
+          <KpiCard label="Sesiones totales" tooltip="Volumen total de tráfico recibido en el sitio web (incluyendo canales como orgánico, directo, pagado, referido, etc.)." value={totalSessVal.toLocaleString('es-ES')} suffix="" trend={""} source={trafficSource} />
+          <KpiCard label="IA referida" tooltip="Sesiones de usuarios que han hecho clic en un enlace de tu marca directamente desde la interfaz de un motor de IA generativa (ej. citas en ChatGPT, Perplexity, etc.)." value={aiReferredVal.toLocaleString('es-ES')} suffix="" trend={""} source={trafficSource} />
+          <KpiCard label="IA inferida" tooltip="Tráfico orgánico o directo que nuestro algoritmo ha identificado como altamente probable de provenir de respuestas copiadas y pegadas de una IA generativa." value={aiInferredVal.toLocaleString('es-ES')} suffix="" trend={""} source={trafficSource} />
+          <KpiCard label="Engagement IA" tooltip="Calificación de 0 a 100 que evalúa la calidad y profundidad del comportamiento en la web del tráfico proveniente de la IA (considera conversiones, tiempo en página y páginas por sesión)." value={engScoreVal} suffix={data?.engagement_score !== undefined ? "/100" : ""} trend={""} source={trafficSource} />
+          <KpiCard label="Visibilidad unbranded" tooltip="Share of Voice estimado de la marca dentro de los motores de IA cuando los usuarios realizan consultas genéricas del sector sin mencionar la marca explícitamente." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? visScoreVal : "N/A"} suffix={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 && data?.visibility_score !== undefined ? "%" : ""} trend={""} source={aiSource} colorClass="!bg-teal-light/20 border-teal/20" />
+          <KpiCard label="Score sentimiento" tooltip="Puntuación promedio de 0 a 10 que evalúa qué tan positivas, neutrales o negativas son las menciones de la marca dentro de las respuestas de IA." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? sentScoreVal : "N/A"} suffix={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 && data?.sentiment_score !== undefined ? "/10" : ""} trend={""} source={aiSource} />
+          <KpiCard label="Modelos analizados" tooltip="Cantidad total de modelos y motores conversacionales de IA que el sistema está monitorizando." value={data ? motorRows.length.toString() : "--"} trend={""} source={aiSource} />
+          <KpiCard label="Dominios monitorizados" tooltip="Volumen de fuentes de información y dominios web (medios, foros, wikis) que están siendo indexados y usados por los motores de IA para generar sus respuestas." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? (data?.total_monitored_domains ? data.total_monitored_domains.toLocaleString('es-ES') : totalUniqueDomains.toLocaleString('es-ES')) : "N/A"} trend={""} source={aiSource} />
         </div>
 
         {!data && !loading ? (
@@ -1041,7 +989,7 @@ const App: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-dashboard-border text-xs">
-                  {motorRows.map((r,i) => (
+                  {motorRows.length > 0 ? motorRows.map((r,i) => (
                     <tr key={i} className="hover:bg-dashboard-bg/20 transition-colors">
                       <td className="px-5 py-2 font-bold text-navy">{r.n}</td>
                       <td className="px-5 py-2 text-right text-mid">{r.s}</td>
@@ -1056,7 +1004,9 @@ const App: React.FC = () => {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                  )) : (
+                    <tr><td colSpan={5} className="px-5 py-8 text-center text-mid text-xs italic">Sin datos de tráfico para este periodo</td></tr>
+                  )}
                 </tbody>
              </table>
           </div>
@@ -1065,10 +1015,10 @@ const App: React.FC = () => {
             title="Visibilidad de marca por motor IA" 
             source={aiSource} 
             data={{
-              labels: ['ChatGPT', 'Gemini', 'Perplexity', 'Claude', 'Copilot'],
+              labels: data?.visibility_by_engine?.length ? data.visibility_by_engine.map((e: any) => e.engine) : ['Sin datos'],
               datasets: [
-                { label: mainBrandLabel, data: [72, 65, 58, 81, 44], backgroundColor: '#36A7B7', borderRadius: 4 },
-                { label: 'Prom.', data: [51, 48, 43, 55, 38], backgroundColor: '#C5D2DA', borderRadius: 4 }
+                { label: mainBrandLabel, data: data?.visibility_by_engine?.length ? data.visibility_by_engine.map((e: any) => e.brand_score) : [0], backgroundColor: '#36A7B7', borderRadius: 4 },
+                { label: 'Prom.', data: data?.visibility_by_engine?.length ? data.visibility_by_engine.map((e: any) => e.competitor_avg) : [0], backgroundColor: '#C5D2DA', borderRadius: 4 }
               ]
             }}
             height={200}
@@ -1082,33 +1032,80 @@ const App: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <ChartWidget 
-            type="bar" 
-            title="Clusters de comportamiento IA" 
-            source="GA4" 
-            data={{
-              labels: ['Investigadores', 'Transaccional', 'Resumen', 'Casual'],
-              datasets: [{ data: [38, 27, 22, 13], backgroundColor: ['#F54963', '#36A7B7', '#0A263B', '#E8A020'], borderRadius: 4 }]
-            }}
-          />
+          {(() => {
+            const rawClusters = data?.behavior_clusters?.length ? data.behavior_clusters : [
+              { label: 'Transaccional', value: 0 },
+              { label: 'Investigación', value: 0 },
+              { label: 'Respuesta Rápida', value: 0 },
+              { label: 'Casual', value: 0 }
+            ];
+            
+            const order = ['Transaccional', 'Investigación', 'Respuesta Rápida', 'Casual'];
+            const sortedClusters = [...rawClusters].sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
+            
+            const clusterColorMap: Record<string, string> = {
+              'Transaccional': '#F54963',
+              'Investigación': '#36A7B7',
+              'Respuesta Rápida': '#0A263B',
+              'Casual': '#E8A020'
+            };
+            
+            const hoverTextMap: Record<string, string> = {
+              'Transaccional': 'Alta intención comercial o de conversión.',
+              'Investigación': 'Fase exploratoria o evaluación detallada.',
+              'Respuesta Rápida': 'Búsqueda de datos puntuales o confirmaciones.',
+              'Casual': 'Interacción periférica sin intención de negocio.'
+            };
+            
+            return (
+              <ChartWidget 
+                type="bar" 
+                title="Clusters de comportamiento IA" 
+                source={trafficSource} 
+                onInfoClick={() => setIsMethodologyOpen(true)}
+                data={{
+                  labels: sortedClusters.map((c: any) => c.label),
+                  datasets: [{ 
+                    label: 'Sesiones IA',
+                    data: sortedClusters.map((c: any) => c.value), 
+                    backgroundColor: sortedClusters.map((c: any) => clusterColorMap[c.label] || '#999999'), 
+                    borderRadius: 4 
+                  }]
+                }}
+                options={{
+                  plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                      callbacks: {
+                        afterLabel: function(context: any) {
+                          return hoverTextMap[context.label] || '';
+                        }
+                      }
+                    }
+                  }
+                }}
+              />
+            );
+          })()}
+          
           <ChartWidget 
             type="bar" 
             title="Visibilidad unbranded — top 5" 
             source={aiSource} 
-            options={{ indexAxis: 'y' }}
+            options={{ indexAxis: 'y', plugins: { legend: { display: false } } }}
             data={{
-              labels: brandLabels,
-              datasets: [{ data: [68, 54, 47, 39, 31], backgroundColor: ['#F54963', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
+              labels: data?.competitors?.length ? data.competitors.map((c: any) => c.domain || c.name) : ['Sin datos'],
+              datasets: [{ data: data?.competitors?.length ? data.competitors.map((c: any) => c.visibility_score) : [0], backgroundColor: ['#F54963', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
             }}
           />
           <ChartWidget 
             type="bar" 
             title="Sentimiento de marca — top 5" 
             source={aiSource} 
-            options={{ indexAxis: 'y', scales: { x: { min: 5, max: 10 } } }}
+            options={{ indexAxis: 'y', scales: { x: { min: 5, max: 10 } }, plugins: { legend: { display: false } } }}
             data={{
-              labels: brandLabels,
-              datasets: [{ data: [7.8, 7.1, 6.9, 6.4, 6.0], backgroundColor: ['#36A7B7', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
+              labels: data?.competitors?.length ? data.competitors.map((c: any) => c.domain || c.name) : ['Sin datos'],
+              datasets: [{ data: data?.competitors?.length ? data.competitors.map((c: any) => c.sentiment_score) : [0], backgroundColor: ['#36A7B7', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
             }}
           />
         </div>
@@ -1133,6 +1130,104 @@ const App: React.FC = () => {
           </>
         )}
       </main>
+
+      {isMethodologyOpen && (
+        <div className="fixed inset-0 bg-navy/80 flex items-center justify-center p-5 z-[2000] backdrop-blur-sm transition-all duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-6 border-b border-dashboard-border bg-dashboard-bg/50">
+              <h3 className="text-lg font-bold text-navy uppercase tracking-widest flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-teal"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                Metodología de Clusters
+              </h3>
+              <button 
+                onClick={() => setIsMethodologyOpen(false)}
+                className="text-mid hover:text-red transition-colors p-1 rounded-full hover:bg-red-light"
+              >
+                <X size={20} strokeWidth={2.5} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto custom-scrollbar">
+              <div className="space-y-6 text-sm text-navy/80 leading-relaxed">
+                <p>
+                  Los <strong className="text-navy">Clusters de Comportamiento IA</strong> clasifican el tráfico inferido basándose en modelos de intención del usuario cuando interactúa con respuestas generadas por Inteligencia Artificial.
+                </p>
+                
+                <div className="space-y-4">
+                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
+                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#F54963'}}></span>
+                      Transaccional
+                    </h4>
+                    <p>Usuarios con alta intención de compra o conversión inmediata. Provienen de prompts que buscan productos específicos, comparativas de precios o enlaces directos de contratación.</p>
+                  </div>
+                  
+                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
+                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#36A7B7'}}></span>
+                      Investigación
+                    </h4>
+                    <p>Usuarios en fase exploratoria o de "mid-funnel". Sus interacciones con la IA suelen ser preguntas de profundidad, tutoriales, o evaluaciones detalladas de servicios antes de tomar una decisión.</p>
+                  </div>
+                  
+                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
+                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#0A263B'}}></span>
+                      Respuesta Rápida
+                    </h4>
+                    <p>Usuarios que buscan un dato puntual (FAQs, números de contacto, horarios). El clic suele ser para verificar o ampliar ligeramente la información mostrada por la IA (Zero-Click searches).</p>
+                  </div>
+                  
+                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
+                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#E8A020'}}></span>
+                      Casual
+                    </h4>
+                    <p>Tráfico menos dirigido, derivado de conversaciones periféricas o menciones de marca sin una intención clara de negocio. Tienen el engagement rate más bajo.</p>
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-dashboard-border">
+                  <div className="flex justify-between items-center mb-4">
+                    <p className="text-xs text-mid">La distribución se calcula utilizando un modelo de propensión basado en las dimensiones semánticas de la consulta de IA inicial y el comportamiento post-clic.</p>
+                    <button 
+                      onClick={() => setShowFormulas(!showFormulas)}
+                      className="text-xs font-bold text-teal hover:text-navy transition-colors px-3 py-1.5 border border-teal/20 rounded-md hover:bg-teal/5 flex-shrink-0 ml-4"
+                    >
+                      {showFormulas ? 'Ocultar Fórmulas' : 'Ver Fórmulas'}
+                    </button>
+                  </div>
+                  
+                  {showFormulas && (
+                    <div className="bg-navy rounded-xl p-5 text-white/90 text-xs font-mono space-y-4 shadow-inner mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div>
+                        <div className="text-teal-light mb-1 font-bold">1. Transaccional (Weight: 1.5)</div>
+                        <div>Score = (conversion_rate * 40) + (bounce_rate_inverse * 20) + (time_on_site_score * 20) + semantic_intent(buy, hire, price)</div>
+                      </div>
+                      <div>
+                        <div className="text-teal-light mb-1 font-bold">2. Investigación (Weight: 1.2)</div>
+                        <div>Score = (pages_per_session * 30) + (time_on_site_score * 30) + semantic_intent(how, what, compare, review)</div>
+                      </div>
+                      <div>
+                        <div className="text-teal-light mb-1 font-bold">3. Respuesta Rápida (Weight: 1.0)</div>
+                        <div>Score = (bounce_rate * 50) + (short_time_on_site * 30) + semantic_intent(contact, address, hours, faq)</div>
+                      </div>
+                      <div>
+                        <div className="text-teal-light mb-1 font-bold">4. Casual (Weight: 0.8)</div>
+                        <div>Score = Default fallback para tráfico de baja retención sin keywords transaccionales o de investigación explícitas.</div>
+                      </div>
+                      <div className="pt-2 border-t border-white/10 text-[10px] text-white/50">
+                        * semantic_intent() se resuelve vía Natural Language Processing en BigQuery, cruzando la Query original reportada por la IA con nuestro corpus de intenciones.
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {exporting && (
         <div className="fixed inset-0 bg-navy/80 flex items-center justify-center p-5 z-[2000]">

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     SECRET_KEY: Optional[str] = os.getenv("SECRET_KEY")
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=[os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"), ".env"],
         extra="allow"
     )
 

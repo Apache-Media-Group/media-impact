@@ -37,6 +37,35 @@ class GAService(AnalyticsService):
         self.is_local = is_local
         self._client = None
         self._admin_client = None
+        
+        if isinstance(credentials, dict):
+            if "private_key" in credentials:
+                from google.oauth2 import service_account
+                self.credentials = service_account.Credentials.from_service_account_info(credentials)
+            elif "token" in credentials and "refresh_token" in credentials:
+                from google.oauth2.credentials import Credentials
+                self.credentials = Credentials(
+                    token=credentials.get("token"),
+                    refresh_token=credentials.get("refresh_token"),
+                    token_uri=credentials.get("token_uri"),
+                    client_id=credentials.get("client_id"),
+                    client_secret=credentials.get("client_secret")
+                )
+            elif "credentials" in credentials and isinstance(credentials["credentials"], dict):
+                # Handle nested credentials (like in ga4-creds)
+                creds = credentials["credentials"]
+                from google.oauth2.credentials import Credentials
+                self.credentials = Credentials(
+                    token=creds.get("token"),
+                    refresh_token=creds.get("refresh_token"),
+                    token_uri=creds.get("token_uri"),
+                    client_id=creds.get("client_id"),
+                    client_secret=creds.get("client_secret")
+                )
+            else:
+                self.credentials = credentials
+        else:
+            self.credentials = credentials
 
     @property
     def client(self) -> BetaAnalyticsDataClient:

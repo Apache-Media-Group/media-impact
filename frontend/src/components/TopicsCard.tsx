@@ -23,7 +23,7 @@ export const TopicsCard: React.FC<TopicsCardProps> = ({ title, topics, source })
         )}
       </div>
       <div className="space-y-4">
-        {topics.map((t, i) => (
+        {topics.length > 0 ? topics.map((t, i) => (
           <div key={i} className="flex items-center gap-3">
             <span className="text-[10px] font-bold text-navy w-32 truncate">{t.l}</span>
             <div className="flex-1 h-1.5 bg-dashboard-bg rounded-full overflow-hidden">
@@ -34,7 +34,9 @@ export const TopicsCard: React.FC<TopicsCardProps> = ({ title, topics, source })
             </div>
             <span className="text-[10px] font-bold text-mid w-4 text-right">{t.w}</span>
           </div>
-        ))}
+        )) : (
+          <div className="text-center text-mid text-xs italic py-4">Sin datos de temáticas para este periodo</div>
+        )}
       </div>
     </div>
   );
