@@ -870,9 +870,53 @@ const App: React.FC = () => {
           </div>
         )}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-          <KpiCard label="Sesiones totales" tooltip="Volumen total de tráfico recibido en el sitio web (incluyendo canales como orgánico, directo, pagado, referido, etc.)." value={totalSessVal.toLocaleString('es-ES')} suffix="" trend={""} source={trafficSource} />
-          <KpiCard label="IA referida" tooltip="Sesiones de usuarios que han hecho clic en un enlace de tu marca directamente desde la interfaz de un motor de IA generativa (ej. citas en ChatGPT, Perplexity, etc.)." value={aiReferredVal.toLocaleString('es-ES')} suffix="" trend={""} source={trafficSource} />
-          <KpiCard label="IA inferida" tooltip="Tráfico orgánico o directo que nuestro algoritmo ha identificado como altamente probable de provenir de respuestas copiadas y pegadas de una IA generativa." value={aiInferredVal.toLocaleString('es-ES')} suffix="" trend={""} source={trafficSource} />
+          <KpiCard 
+            label="Sesiones totales" 
+            tooltip="Volumen total de tráfico recibido en el sitio web (incluyendo canales como orgánico, directo, pagado, referido, etc.)." 
+            value={totalSessVal.toLocaleString('es-ES')} 
+            suffix="" 
+            trend={""} 
+            source={trafficSource} 
+          />
+          <KpiCard 
+            label="IA referida" 
+            tooltip="Sesiones directas declaradas por motores de IA." 
+            longTooltip={
+              <>
+                <p>
+                  Las sesiones de <strong className="text-navy">IA Referida</strong> representan a los usuarios que han hecho clic en un enlace de tu marca directamente desde la interfaz de un motor de IA generativa y el motor declara explícitamente su origen en la cabecera HTTP (ej. <code className="bg-gray-100 px-1 rounded">chatgpt.com / referral</code>).
+                </p>
+                <p>
+                  Es común que este número sea significativamente inferior a la IA Inferida, ya que la gran mayoría de interacciones con IA, especialmente en aplicaciones móviles (como la app de ChatGPT, Apple Intelligence, etc.) u otras plataformas, ocultan su origen inyectando el tráfico como "Directo".
+                </p>
+              </>
+            }
+            value={aiReferredVal.toLocaleString('es-ES')} 
+            suffix="" 
+            trend={""} 
+            source={trafficSource} 
+          />
+          <KpiCard 
+            label="IA inferida" 
+            tooltip="Tráfico orgánico/directo perfilado como proviniendo de IA." 
+            longTooltip={
+              <>
+                <p>
+                  Las sesiones de <strong className="text-navy">IA Inferida</strong> representan tráfico que, aunque ingresa a tu web camuflado como "Directo" o sin referente claro, ha sido clasificado por el algoritmo algorítmico de LLYC como altamente probable de provenir de consultas de IA.
+                </p>
+                <p>
+                  Nuestro modelo de propensión analiza factores de comportamiento en tiempo real, como la velocidad de rebote, la profundidad de scroll, el tiempo en página y la URL de aterrizaje para reconstruir el "viaje del usuario" y detectar interacciones típicas de cuando un usuario copia, pega o hace tap en un enlace sugerido por un chat de Inteligencia Artificial que no envía cabeceras de referer.
+                </p>
+                <p>
+                  En el entorno SEO actual dominado por respuestas Zero-Click y apps nativas, <strong className="text-teal">es la norma y lo esperado</strong> que el tráfico inferido supere holgadamente al tráfico explícitamente referido.
+                </p>
+              </>
+            }
+            value={aiInferredVal.toLocaleString('es-ES')} 
+            suffix="" 
+            trend={""} 
+            source={trafficSource} 
+          />
           <KpiCard label="Engagement IA" tooltip="Calificación de 0 a 100 que evalúa la calidad y profundidad del comportamiento en la web del tráfico proveniente de la IA (considera conversiones, tiempo en página y páginas por sesión)." value={engScoreVal} suffix={data?.engagement_score !== undefined ? "/100" : ""} trend={""} source={trafficSource} />
           <KpiCard label="Visibilidad unbranded" tooltip="Share of Voice estimado de la marca dentro de los motores de IA cuando los usuarios realizan consultas genéricas del sector sin mencionar la marca explícitamente." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? visScoreVal : "N/A"} suffix={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 && data?.visibility_score !== undefined ? "%" : ""} trend={""} source={aiSource} colorClass="!bg-teal-light/20 border-teal/20" />
           <KpiCard label="Score sentimiento" tooltip="Puntuación promedio de 0 a 10 que evalúa qué tan positivas, neutrales o negativas son las menciones de la marca dentro de las respuestas de IA." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? sentScoreVal : "N/A"} suffix={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 && data?.sentiment_score !== undefined ? "/10" : ""} trend={""} source={aiSource} />

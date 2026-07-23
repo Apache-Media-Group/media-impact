@@ -629,7 +629,7 @@ class MCPETLService:
                             "property_id": "properties/peec-default",
                             "segment_id": "all-users"
                         }
-                    merged_traffic[key]["ai_referred_sessions"] += int(float(r.get("ai_referred", 0)))
+                    
                     peec_inferred = int(float(r.get("ai_inferred", 0)))
                     merged_traffic[key]["ai_inferred_sessions"] += peec_inferred
                     
