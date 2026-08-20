@@ -100,6 +100,8 @@ export const useAnalytics = () => {
           topics_digital: result.metadata?.topics_digital || [],
           domains: result.metadata?.domains || [],
           visibility_by_engine: result.metadata?.visibility_by_engine || [],
+          content_affinity: result.metadata?.content_affinity || [],
+          inferred_traffic: result.metadata?.inferred_traffic || result.inferred_traffic || null,
           behavior_clusters: result.metadata?.behavioral_clusters?.distribution ? [
             { label: 'Investigación', value: result.metadata.behavioral_clusters.distribution.researcher || 0 },
             { label: 'Respuesta Rápida', value: result.metadata.behavioral_clusters.distribution.quick_answer || 0 },

@@ -9,6 +9,7 @@ import { KpiCard } from './components/KpiCard';
 import { ChartWidget } from './components/ChartWidget';
 import { TopicsCard } from './components/TopicsCard';
 import { DomainsTable } from './components/DomainsTable';
+import { UrlsTable } from './components/UrlsTable';
 import { useAnalytics } from './hooks/useAnalytics';
 import { AdminPanel } from './components/AdminPanel';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -26,6 +27,7 @@ interface TenantConfig {
   secondary_color: string;
   font_family: string;
   support_email: string;
+  ga4_conversion_events?: string[];
   updated_at?: string;
   configured_secrets?: {
     'brandlight-key'?: boolean;
@@ -897,7 +899,19 @@ const App: React.FC = () => {
             source={trafficSource} 
           />
           <KpiCard 
-            label="IA inferida" 
+            label={
+              <div className="flex items-center gap-1.5">
+                IA inferida
+                {data?.inferred_traffic?.confidence_index && !data.inferred_traffic.confidence_index.is_significant && (
+                  <div 
+                    className="text-amber-500 cursor-help flex items-center" 
+                    title="Muestra estadística insuficiente. El margen de error puede ser mayor al habitual."
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                  </div>
+                )}
+              </div>
+            } 
             tooltip="Tráfico orgánico/directo perfilado como proviniendo de IA." 
             longTooltip={
               <>
@@ -1009,39 +1023,59 @@ const App: React.FC = () => {
                 <div className="text-[11px] font-bold text-navy uppercase tracking-widest mb-1 flex items-center gap-1">
                   Rendimiento por motor IA <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${trafficSource === 'Adobe' ? 'bg-navy/10 text-navy' : 'bg-teal-light text-teal'}`}>{trafficSource}</span>
                 </div>
-                <div className="text-[10px] text-mid mb-4">Sesiones · duración · conversión · score</div>
+                <div className="text-[10px] text-mid mb-4">Desglose de conversiones configuradas</div>
              </div>
-             <table className="w-full text-left border-collapse">
-                <thead className="bg-dashboard-bg/50">
-                  <tr className="text-[10px] font-bold text-mid uppercase tracking-widest">
-                    <th className="px-5 py-2">Motor</th>
-                    <th className="px-5 py-2 text-right">Sesiones</th>
-                    <th className="px-5 py-2 text-right">Duración</th>
-                    <th className="px-5 py-2 text-right">Conv.</th>
-                    <th className="px-5 py-2">Score</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-dashboard-border text-xs">
-                  {motorRows.length > 0 ? motorRows.map((r,i) => (
-                    <tr key={i} className="hover:bg-dashboard-bg/20 transition-colors">
-                      <td className="px-5 py-2 font-bold text-navy">{r.n}</td>
-                      <td className="px-5 py-2 text-right text-mid">{r.s}</td>
-                      <td className="px-5 py-2 text-right text-mid">{r.d}</td>
-                      <td className="px-5 py-2 text-right text-mid">{r.c}</td>
-                      <td className="px-5 py-2">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 h-1 bg-dashboard-bg rounded-full overflow-hidden min-w-[40px]">
-                            <div className="h-full bg-red" style={{width:`${r.sc}%`}}></div>
-                          </div>
-                          <span className="text-[10px] font-bold text-mid">{r.sc}</span>
-                        </div>
-                      </td>
+             <div className="overflow-x-auto">
+               <table className="w-full text-left border-collapse min-w-[600px]">
+                  <thead className="bg-dashboard-bg/50">
+                    <tr className="text-[10px] font-bold text-mid uppercase tracking-widest">
+                      <th className="px-5 py-2">Motor</th>
+                      <th className="px-5 py-2 text-right">Sesiones</th>
+                      <th className="px-5 py-2 text-right">Duración</th>
+                      {/* Columnas dinámicas de conversión */}
+                      {tenant?.ga4_conversion_events && tenant.ga4_conversion_events.length > 0 ? (
+                        tenant.ga4_conversion_events.map(event => (
+                          <th key={event} className="px-5 py-2 text-right">{event.replace(/_/g, ' ')}</th>
+                        ))
+                      ) : (
+                        <th className="px-5 py-2 text-right">Conv.</th>
+                      )}
+                      <th className="px-5 py-2 text-center">Score</th>
                     </tr>
-                  )) : (
-                    <tr><td colSpan={5} className="px-5 py-8 text-center text-mid text-xs italic">Sin datos de tráfico para este periodo</td></tr>
-                  )}
-                </tbody>
-             </table>
+                  </thead>
+                  <tbody className="divide-y divide-dashboard-border text-xs">
+                    {motorRows.length > 0 ? motorRows.map((r: any, i: number) => (
+                      <tr key={i} className="hover:bg-dashboard-bg/20 transition-colors">
+                        <td className="px-5 py-2 font-bold text-navy">{r.n}</td>
+                        <td className="px-5 py-2 text-right text-mid">{r.s}</td>
+                        <td className="px-5 py-2 text-right text-mid">{r.d}</td>
+                        
+                        {/* Valores dinámicos de conversión */}
+                        {tenant?.ga4_conversion_events && tenant.ga4_conversion_events.length > 0 ? (
+                          tenant.ga4_conversion_events.map(event => (
+                            <td key={event} className="px-5 py-2 text-right text-mid font-medium text-navy">
+                              {r.conversionsByEvent?.[event] || 0}
+                            </td>
+                          ))
+                        ) : (
+                          <td className="px-5 py-2 text-right text-mid">{r.c}</td>
+                        )}
+
+                        <td className="px-5 py-2">
+                          <div className="flex items-center gap-2 justify-end">
+                            <span className="text-[10px] font-bold text-mid">{r.sc}</span>
+                            <div className="w-16 h-1 bg-dashboard-bg rounded-full overflow-hidden">
+                              <div className="h-full bg-red" style={{width:`${r.sc}%`}}></div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr><td colSpan={6} className="px-5 py-8 text-center text-mid text-xs italic">Sin datos de tráfico para este periodo</td></tr>
+                    )}
+                  </tbody>
+               </table>
+             </div>
           </div>
           <ChartWidget 
             type="bar" 
@@ -1154,6 +1188,12 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 gap-6">
           <DomainsTable title="Top 10 dominios de visibilidad" source={aiSource} rows={top10Domains} />
         </div>
+
+        {data?.content_affinity && data.content_affinity.length > 0 && (
+          <div className="grid grid-cols-1 gap-6">
+            <UrlsTable title="URLs de Aterrizaje Recomendadas por IA" source={trafficSource} rows={data.content_affinity} />
+          </div>
+        )}
           </>
         )}
       </main>

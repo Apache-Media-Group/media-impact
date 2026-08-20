@@ -17,7 +17,7 @@ cd backend
 # --- Verificación de Autenticación GCP ---
 echo "🔐 Verificando autenticación en GCP..."
 ACTIVE_ACCOUNT=$(gcloud config get-value account 2>/dev/null || echo "")
-if [[ "$ACTIVE_ACCOUNT" != *"@llyc.global" ]] && [[ "$ACTIVE_ACCOUNT" != *"@llyc.ai" ]]; then
+if [[ "$ACTIVE_ACCOUNT" != *"@llyc.global" ]] && [[ "$ACTIVE_ACCOUNT" != *"@llyc.ai" ]] && [[ "$ACTIVE_ACCOUNT" != *"gserviceaccount.com" ]]; then
     echo "⚠️ Tu cuenta activa de GCP ($ACTIVE_ACCOUNT) no pertenece a @llyc.global o @llyc.ai"
     echo "🔑 Iniciando proceso de login en gcloud..."
     gcloud auth login
@@ -35,7 +35,7 @@ ACTIVE_PROJECT=$(gcloud config get-value project 2>/dev/null || echo "llyc-ai-fi
 echo "✅ Proyecto GCP activo: $ACTIVE_PROJECT"
 
 # Exportamos explícitamente la Service Account de pruebas para que la API tenga permisos de lectura
-export GOOGLE_APPLICATION_CREDENTIALS="/Users/santiagorovira/media_impact/media-impact-test-keys.json"
+export GOOGLE_APPLICATION_CREDENTIALS="/Users/santiagorovira/media_impact/media-impact-ai-first-core.json"
 export GCP_PROJECT_ID="$ACTIVE_PROJECT"
 export GOOGLE_CLOUD_PROJECT="$ACTIVE_PROJECT"
 # -----------------------------------------

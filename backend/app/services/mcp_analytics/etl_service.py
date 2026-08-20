@@ -382,6 +382,48 @@ class MCPETLService:
                         stats.pop("total_duration", None)
                         stats.pop("total_views", None)
 
+                # --- NUEVO: Extraer Content Affinity granular (URLs) ---
+                if on_progress:
+                    on_progress("Ejecutando Ingesta (Google Analytics 4 - URLs)", "Descargando páginas de aterrizaje recomendadas por IA...")
+                
+                try:
+                    df_granular = ga_traffic_ia_service._fetch_granular_data(ga4_property_id, {"start_date": date_from, "end_date": date_to})
+                    if not df_granular.empty:
+                        df_granular = ga_traffic_ia_service._tag_traffic_sources(df_granular)
+                        df_granular = ga_traffic_ia_service._assign_behavioral_clusters(df_granular)
+                        
+                        # Guardar diariamente
+                        ai_known_df = df_granular[df_granular['is_known_ai']].copy()
+                        if not ai_known_df.empty:
+                            affinity_rows = []
+                            # Add a date column since we fetched the whole range, we'll assign it to date_to for simplicity or loop.
+                            # For simplicity, since this is a backfill per day or range, we just assign date_to.
+                            top = ai_known_df.groupby('landing_page').agg({'sessions': 'sum', 'userEngagementDuration': 'sum', 'cluster': lambda x: x.mode().iloc[0] if not x.mode().empty else 'casual'}).reset_index()
+                            for _, r in top.iterrows():
+                                lp = str(r['landing_page'])
+                                lp_df = ai_known_df[ai_known_df['landing_page'] == lp]
+                                platform_breakdown = lp_df.groupby('ai_platform')['sessions'].sum().to_dict()
+                                
+                                affinity_rows.append({
+                                    "tenant_id": self.tenant_id,
+                                    "date": date_to, # Asignamos la fecha final del batch
+                                    "landing_page": lp,
+                                    "sessions": int(r['sessions']),
+                                    "user_engagement_duration": float(r['userEngagementDuration']),
+                                    "cluster": str(r['cluster']),
+                                    "chatgpt_sessions": int(platform_breakdown.get("ChatGPT", 0)),
+                                    "gemini_sessions": int(platform_breakdown.get("Gemini", 0)),
+                                    "perplexity_sessions": int(platform_breakdown.get("Perplexity", 0)),
+                                    "claude_sessions": int(platform_breakdown.get("Claude", 0)),
+                                    "copilot_sessions": int(platform_breakdown.get("Copilot", 0)),
+                                    "other_ai_sessions": int(platform_breakdown.get("Other AI", 0))
+                                })
+                            if affinity_rows:
+                                self.bq_service.delete_existing_records("fact_content_affinity", self.tenant_id, date_from, date_to)
+                                self.bq_service.insert_rows("fact_content_affinity", affinity_rows)
+                except Exception as e_url:
+                    logger.warning(f"Error al extraer Content Affinity URLs para {ga4_property_id}: {e_url}")
+
                 results["ga4"] = f"success ({len(all_rows)} filas)"
             except Exception as e:
                 logger.error(f"Error en extracción de GA4: {e}")

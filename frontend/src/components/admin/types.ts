@@ -10,6 +10,7 @@ export interface TenantConfig {
   support_email: string;
   authorized_emails?: string[];
   authorized_domains?: string[];
+  ga4_conversion_events?: string[];
   updated_at?: string;
   configured_secrets?: {
     'brandlight-key'?: boolean;

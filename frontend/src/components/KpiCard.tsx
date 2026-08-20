@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ArrowUpRight, ArrowDownRight, Info, X } from 'lucide-react';
 
 interface KpiCardProps {
-  label: string;
+  label: React.ReactNode;
   value: string | number;
   suffix?: string;
   trend?: string;

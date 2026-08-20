@@ -114,6 +114,20 @@ class BigQueryService:
                     bigquery.SchemaField("priority_score", "INTEGER", mode="NULLABLE"),
                     bigquery.SchemaField("recommendation_strategy", "STRING", mode="NULLABLE"),
                     bigquery.SchemaField("execution_steps", "STRING", mode="NULLABLE"),
+                ],
+                "fact_content_affinity": [
+                    bigquery.SchemaField("tenant_id", "STRING", mode="REQUIRED"),
+                    bigquery.SchemaField("date", "DATE", mode="REQUIRED"),
+                    bigquery.SchemaField("landing_page", "STRING", mode="REQUIRED"),
+                    bigquery.SchemaField("sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("user_engagement_duration", "FLOAT", mode="NULLABLE"),
+                    bigquery.SchemaField("cluster", "STRING", mode="NULLABLE"),
+                    bigquery.SchemaField("chatgpt_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("gemini_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("perplexity_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("claude_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("copilot_sessions", "INTEGER", mode="NULLABLE"),
+                    bigquery.SchemaField("other_ai_sessions", "INTEGER", mode="NULLABLE"),
                 ]
             }
 
@@ -593,9 +607,61 @@ class BigQueryService:
             except Exception as e:
                 logger.warning(f"Error querying topics for {tenant_id}: {e}")
 
+            # 5. Query para URLs / Content Affinity
+            query_urls = f"""
+                SELECT 
+                    landing_page,
+                    SUM(sessions) as total_sessions,
+                    SUM(user_engagement_duration) as total_duration,
+                    ANY_VALUE(cluster) as dominant_cluster,
+                    SUM(chatgpt_sessions) as chatgpt,
+                    SUM(gemini_sessions) as gemini,
+                    SUM(perplexity_sessions) as perplexity,
+                    SUM(claude_sessions) as claude,
+                    SUM(copilot_sessions) as copilot,
+                    SUM(other_ai_sessions) as other_ai
+                FROM `{self.project_id}.{self.dataset_id}.fact_content_affinity`
+                WHERE tenant_id = @tenant_id
+                  AND date BETWEEN @start_date AND @end_date
+                GROUP BY landing_page
+                ORDER BY total_sessions DESC
+                LIMIT 20
+            """
+            try:
+                urls_job = self.client.query(query_urls, job_config=job_config)
+                urls_results = list(urls_job.result())
+                
+                content_affinity = []
+                for row in urls_results:
+                    sess = row.total_sessions or 0
+                    if sess == 0: continue
+                    dur = row.total_duration or 0
+                    avg_dur = dur / sess
+                    m, sc = divmod(int(avg_dur), 60)
+                    
+                    content_affinity.append({
+                        "landing_page": row.landing_page,
+                        "sessions": sess,
+                        "share_ia": f"{round((sess / max(total_ai_referred + total_ai_inferred, 1)) * 100, 1)}%",
+                        "avg_duration": f"{m:02d}:{sc:02d}" if avg_dur >= 60 else f"{int(avg_dur)}s",
+                        "cluster": row.dominant_cluster or "casual",
+                        "platform_breakdown": {
+                            "chatgpt": row.chatgpt or 0,
+                            "gemini": row.gemini or 0,
+                            "perplexity": row.perplexity or 0,
+                            "claude": row.claude or 0,
+                            "copilot": row.copilot or 0,
+                            "other_ai": row.other_ai or 0
+                        }
+                    })
+                metrics["content_affinity"] = content_affinity
+            except Exception as e:
+                logger.warning(f"Error querying content affinity for {tenant_id}: {e}")
+
             logger.info(f"Métricas consolidadas de BigQuery para '{tenant_id}' (has_data={metrics['has_data']}) recuperadas con éxito.")
             return metrics
             
         except Exception as e:
             logger.error(f"Error al realizar consulta analítica en BigQuery para {tenant_id}: {e}")
             return {}
+

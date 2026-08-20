@@ -96,6 +96,18 @@ export const TenantTable: React.FC<TenantTableProps> = ({
                       Brandlight
                     </span>
                   </div>
+
+                  {/* Eventos de conversión GA4 */}
+                  {t.ga4_conversion_events && t.ga4_conversion_events.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      <span className="text-[9px] text-mid uppercase tracking-wider font-semibold mr-1">Conv. GA4:</span>
+                      {t.ga4_conversion_events.map((ev, idx) => (
+                        <span key={idx} className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                          {ev}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

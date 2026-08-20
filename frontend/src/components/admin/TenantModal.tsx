@@ -22,11 +22,13 @@ export const TenantModal: React.FC<TenantModalProps> = ({
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [emailsInput, setEmailsInput] = useState('');
   const [domainsInput, setDomainsInput] = useState('');
+  const [ga4EventsInput, setGa4EventsInput] = useState('');
 
   useEffect(() => {
     setEditingTenant(tenant);
     setEmailsInput(tenant.authorized_emails ? tenant.authorized_emails.join(', ') : '');
     setDomainsInput(tenant.authorized_domains ? tenant.authorized_domains.join(', ') : '');
+    setGa4EventsInput(tenant.ga4_conversion_events ? tenant.ga4_conversion_events.join(', ') : '');
   }, [tenant]);
 
   const handleEmailsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -41,6 +43,13 @@ export const TenantModal: React.FC<TenantModalProps> = ({
     setDomainsInput(value);
     const list = value.split(',').map(item => item.trim()).filter(Boolean);
     setEditingTenant(prev => ({ ...prev, authorized_domains: list }));
+  };
+
+  const handleGa4EventsChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setGa4EventsInput(value);
+    const list = value.split(',').map(item => item.trim()).filter(Boolean);
+    setEditingTenant(prev => ({ ...prev, ga4_conversion_events: list }));
   };
 
   if (!isOpen) return null;
@@ -255,6 +264,26 @@ export const TenantModal: React.FC<TenantModalProps> = ({
                 {editingTenant.authorized_domains.map((domain, idx) => (
                   <span key={idx} className="px-2 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded text-[10px] text-blue-400 font-semibold">
                     {domain}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase tracking-wider text-mid mb-1">Eventos de Conversión GA4 (Separados por comas)</label>
+            <input 
+              type="text" 
+              value={ga4EventsInput}
+              onChange={handleGa4EventsChange}
+              placeholder="ej: generate_lead, form_submit, purchase"
+              className="w-full bg-[#0a1829] border border-white/10 rounded-lg px-4 py-2.5 text-xs text-white focus:outline-none focus:border-red transition-colors"
+            />
+            {editingTenant.ga4_conversion_events && editingTenant.ga4_conversion_events.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5 max-h-[60px] overflow-y-auto">
+                {editingTenant.ga4_conversion_events.map((ev, idx) => (
+                  <span key={idx} className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[10px] text-emerald-400 font-semibold">
+                    {ev}
                   </span>
                 ))}
               </div>
