@@ -37,3 +37,7 @@ Realizar commit de los cambios y desplegar a Firebase / Cloud Run para disponibi
 - Se amplió el esquema de BigQuery (`bigquery_service.py`) creando la tabla `fact_content_affinity` para soportar la granularidad de las URLs (Landing Pages).
 - Se actualizó el pipeline ETL (`etl_service.py`) para extraer los datos granulares de GA4, empaquetarlos en la nueva tabla, y servirlos dinámicamente en el dashboard sin incurrir en llamadas costosas a la Live API en cada carga, respetando así la estrategia de optimización de costos.
 - Se lanzó un proceso de Backfill Histórico asíncrono para poblar los últimos 90 días con la nueva estructura de datos.
+### 6. Resolución del Bug de Componentes Ocultos (URLs de Aterrizaje)
+- Se detectó a través de queries manuales de validación que el ETL en BigQuery sí estaba guardando los datos (`fact_content_affinity`).
+- Se localizó un bug en `analytics.py` (líneas 301) donde la key `content_affinity` estaba siendo descartada explícitamente en el objeto `metadata` de la respuesta JSON del servidor, lo que causaba que el frontend ocultara el componente.
+- Se ha incluido esta clave de manera explícita en el constructor del modelo en la API para pasar los datos crudos consolidados directamente al componente de React.

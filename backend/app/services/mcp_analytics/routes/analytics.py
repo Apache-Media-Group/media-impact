@@ -299,7 +299,8 @@ async def run_report(
                         "topics_digital": metrics.get("topics_digital", []),
                         "domains": metrics.get("domains", []),
                         "behavioral_clusters": metrics.get("behavioral_clusters", {}),
-                        "visibility_by_engine": metrics.get("visibility_by_engine", [])
+                        "visibility_by_engine": metrics.get("visibility_by_engine", []),
+                        "content_affinity": metrics.get("content_affinity", [])
                     }
                 )
         except Exception as bqe:
@@ -325,7 +326,8 @@ async def run_report(
             row_count=len(report_rows),
             metadata={
                 "total_monitored_domains": 0, "competitors": [], "topics_pr": [],
-                "topics_digital": [], "domains": [], "behavioral_clusters": {}, "visibility_by_engine": []
+                "topics_digital": [], "domains": [], "behavioral_clusters": {}, "visibility_by_engine": [],
+                "content_affinity": []
             }
         )
 
@@ -494,8 +496,25 @@ async def analyze_traffic_ia(
     credentials = get_credentials(s_id, c_id, user_email)
     if not credentials:
         raise HTTPException(status_code=401, detail="No autenticado")
+        
+    conversion_events = []
+    if request.tenant_id:
+        try:
+            tm = TokenManager()
+            if tm.db:
+                doc = tm.db.collection("tenants").document(request.tenant_id.lower().strip()).get()
+                if doc.exists:
+                    conversion_events = doc.to_dict().get("ga4_conversion_events", [])
+        except Exception as e:
+            logger.warning(f"Failed to fetch tenant {request.tenant_id} for conversion events: {e}")
+            
     ia_service = GATrafficIAService(credentials)
-    return await ia_service.analyze_traffic_ia(request.property_id, {"start_date": request.start_date, "end_date": request.end_date}, language=getattr(request, 'language', 'es'))
+    return await ia_service.analyze_traffic_ia(
+        request.property_id, 
+        {"start_date": request.start_date, "end_date": request.end_date}, 
+        language=getattr(request, 'language', 'es'),
+        conversion_events=conversion_events
+    )
 
 @router.post("/traffic-ia/url-analysis", response_model=TrafficIAURLAnalysisResponse)
 async def execute_traffic_ia_url_analysis(
