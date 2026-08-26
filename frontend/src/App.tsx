@@ -526,12 +526,13 @@ const App: React.FC = () => {
   };
 
   if (isAdminView) {
-    return <AdminPanel adminEmailProp={adminUserEmail || undefined} onBack={handleGoToDashboard} onPreviewTenant={handlePreviewTenant} onPreviewLiveAPI={handlePreviewLiveAPI} />;
+    return <AdminPanel key="admin-panel-view" adminEmailProp={adminUserEmail || undefined} onBack={handleGoToDashboard} onPreviewTenant={handlePreviewTenant} onPreviewLiveAPI={handlePreviewLiveAPI} />;
   }
 
   if (!showDashboard) {
     return (
       <WelcomeScreen 
+        key="welcome-screen-view"
         onSelectGA4={handleSelectGA4}
         onSelectAdobe={handleSelectAdobe}
         onSelectPeec={handleSelectPeec}
@@ -544,7 +545,7 @@ const App: React.FC = () => {
   // Pantalla de carga mientras se inicializa Auth o se verifica el acceso en vivo
   if (authLoading || (currentUserEmail && verifyingAccess)) {
     return (
-      <div className="fixed inset-0 bg-[#060c18] flex flex-col items-center justify-center p-5 z-[1000] gap-4">
+      <div key="auth-verifying-screen" className="fixed inset-0 bg-[#060c18] flex flex-col items-center justify-center p-5 z-[1000] gap-4">
         <div className="w-12 h-12 border-4 border-t-transparent rounded-full animate-spin" style={{ borderColor: tenant.primary_color || '#E51D24', borderTopColor: 'transparent' }} />
         <p className="text-white text-xs uppercase tracking-widest font-bold">Verificando Credenciales de {tenant.tenant_name}…</p>
       </div>
@@ -555,6 +556,7 @@ const App: React.FC = () => {
   if (!isTenantAuthorized) {
     return (
       <ClientLoginScreen 
+        key="client-login-view"
         tenant={tenant}
         isAccessDenied={!!currentUserEmail && !is2faRequired}
         onClearAccessDenied={() => {

@@ -65,12 +65,6 @@ export const TopicsCard: React.FC<TopicsCardProps> = ({ title, topics, source })
           </div>
         )}
       </div>
-      
-      <style>{`
-        @keyframes shimmer {
-          100% { transform: translateX(100%); }
-        }
-      `}</style>
     </div>
   );
 };

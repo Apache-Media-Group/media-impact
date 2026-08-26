@@ -59,18 +59,13 @@ export const ChartWidget: React.FC<ChartWidgetProps> = ({
     ...options
   };
 
-  const chartId = React.useId();
+  const hasValidData = Boolean(
+    data &&
+    Array.isArray(data.datasets) &&
+    data.datasets.length > 0 &&
+    data.datasets.some((d: any) => Array.isArray(d.data) && d.data.length > 0)
+  );
 
-  const renderChart = () => {
-    const chartKey = chartId + (data?.datasets?.[0]?.data?.length || 0);
-
-    switch (type) {
-      case 'line': return <Line key={chartKey} data={data} options={baseOptions} />;
-      case 'bar': return <Bar key={chartKey} data={data} options={baseOptions} />;
-      case 'doughnut': return <Doughnut key={chartKey} data={data} options={baseOptions} />;
-      default: return null;
-    }
-  };
 
   return (
     <div className="bg-white rounded-xl p-5 border border-dashboard-border shadow-sm flex flex-col">
@@ -92,8 +87,16 @@ export const ChartWidget: React.FC<ChartWidgetProps> = ({
         )}
       </div>
       
-      <div style={{ height }}>
-        {renderChart()}
+      <div className="w-full relative" style={{ height }}>
+        {hasValidData ? (
+          type === 'line' ? <Line data={data} options={baseOptions} /> :
+          type === 'bar' ? <Bar data={data} options={baseOptions} /> :
+          type === 'doughnut' ? <Doughnut data={data} options={baseOptions} /> : null
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-xs text-mid/60 italic">
+            Sin datos para este periodo
+          </div>
+        )}
       </div>
 
       {legendId && <div id={legendId} className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-mid"></div>}

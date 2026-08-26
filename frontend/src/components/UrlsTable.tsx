@@ -28,8 +28,8 @@ export const UrlsTable: React.FC<UrlsTableProps> = ({ title, rows, source }) => 
           )}
         </div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[600px]">
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse min-w-[580px]">
           <thead className="bg-dashboard-bg/50">
             <tr>
               <th className="px-5 py-2 text-[10px] font-bold text-mid uppercase tracking-widest">URL de Aterrizaje</th>

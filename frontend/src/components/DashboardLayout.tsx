@@ -18,34 +18,35 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ onRefresh, onExport, onFileUpload, loading, exporting, lastUpdated, tenant }) => (
-  <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-8 sticky top-0 z-[50]">
-    <div className="flex items-center gap-6">
+  <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-4 sm:px-8 sticky top-0 z-[50] pt-[env(safe-area-inset-top,0px)]">
+    <div className="flex items-center gap-4 sm:gap-6">
       {tenant?.logo_url ? (
         <img src={tenant.logo_url} alt={tenant.tenant_name} className="h-8 object-contain max-w-[120px]" />
       ) : (
         <div className="text-red font-black text-xl tracking-tighter">{tenant?.tenant_name || 'LLYC'}</div>
       )}
-      <div className="h-4 w-[1px] bg-dashboard-border"></div>
-      <div className="text-[11px] font-black uppercase tracking-widest text-navy">
+      <div className="h-4 w-[1px] bg-dashboard-border hidden sm:block"></div>
+      <div className="text-[11px] font-black uppercase tracking-widest text-navy hidden sm:block">
         Intelligence Dashboard <span className="text-mid font-medium">2026</span>
       </div>
     </div>
     
-    <div className="flex items-center gap-3">
-      <div id="ts" className="text-[10px] font-bold uppercase tracking-widest text-mid">
+    <div className="flex items-center gap-2 sm:gap-3">
+      <div id="ts" className="text-[10px] font-bold uppercase tracking-widest text-mid hidden md:block">
         Actualizado: {lastUpdated}
       </div>
       <button 
         onClick={onRefresh}
-        className="w-8 h-8 flex items-center justify-center bg-dashboard-bg rounded-lg hover:bg-navy-light transition-colors"
+        aria-label="Refrescar datos del dashboard"
+        className="w-9 h-9 sm:w-8 sm:h-8 flex items-center justify-center bg-dashboard-bg rounded-lg hover:bg-navy-light transition-colors focus:outline-none focus:ring-2 focus:ring-navy/20"
         disabled={loading}
       >
         <RefreshCw className={`w-4 h-4 text-navy ${loading ? 'spin' : ''}`} />
       </button>
       
       {onFileUpload && (
-        <label className="flex items-center gap-2 px-4 py-2 bg-navy-light text-navy rounded-lg text-[11px] font-black uppercase tracking-widest hover:opacity-90 cursor-pointer transition-opacity">
-          <FileUp className="w-4 h-4" /> Importar CSV
+        <label className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-navy-light text-navy rounded-lg text-[11px] font-black uppercase tracking-widest hover:opacity-90 cursor-pointer transition-opacity min-h-[36px]">
+          <FileUp className="w-4 h-4" /> <span className="hidden sm:inline">Importar</span> CSV
           <input 
             type="file" 
             className="hidden" 
@@ -62,9 +63,10 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh, onExport, onFileUploa
       <button 
         onClick={onExport}
         disabled={exporting}
-        className="flex items-center gap-2 px-4 py-2 bg-navy text-white rounded-lg text-[11px] font-black uppercase tracking-widest hover:opacity-90 transition-opacity disabled:opacity-50"
+        aria-label="Exportar informe a PDF"
+        className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-navy text-white rounded-lg text-[11px] font-black uppercase tracking-widest hover:opacity-90 transition-opacity disabled:opacity-50 min-h-[36px]"
       >
-        <FileText className={`w-4 h-4 ${exporting ? 'spin' : ''}`} /> {exporting ? 'Exportar PDF' : 'Exportar PDF'}
+        <FileText className={`w-4 h-4 ${exporting ? 'spin' : ''}`} /> <span>Exportar PDF</span>
       </button>
     </div>
   </header>
@@ -94,27 +96,31 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onAccountChange
 }) => {
   const isAdobe = state.connection_id?.toLowerCase().includes('adobe');
+  const todayStr = new Date().toISOString().split('T')[0];
 
   const generalConnections = connections.filter(c => c.platform === 'GA4' || c.platform === 'ADOBE_ANALYTICS');
   const aiConnections = connections.filter(c => c.platform === 'PEEC' || c.platform === 'BRANDLIGHT');
 
   return (
-    <div className="bg-white border-b border-dashboard-border px-8 py-3 flex items-center gap-4 overflow-x-auto whitespace-nowrap custom-scrollbar">
+    <div className="bg-white border-b border-dashboard-border px-4 sm:px-8 py-3 flex items-center gap-4 overflow-x-auto whitespace-nowrap custom-scrollbar">
       <div className="flex items-center gap-2">
-        <Calendar className="w-4 h-4 text-mid" />
+        <Calendar className="w-4 h-4 text-mid flex-shrink-0" />
         <span className="text-[11px] font-bold text-mid uppercase tracking-widest">Desde</span>
         <input 
           type="date" 
           value={state.from} 
+          max={state.to || todayStr}
           onChange={e => updateState({ from: e.target.value })}
-          className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
+          className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 font-medium text-navy"
         />
         <span className="text-[11px] font-bold text-mid uppercase tracking-widest">hasta</span>
         <input 
           type="date" 
           value={state.to} 
+          min={state.from}
+          max={todayStr}
           onChange={e => updateState({ to: e.target.value })}
-          className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20"
+          className="bg-dashboard-bg border border-dashboard-border rounded px-2 py-1 text-xs outline-none focus:ring-1 ring-red/20 font-medium text-navy"
         />
       </div>
       

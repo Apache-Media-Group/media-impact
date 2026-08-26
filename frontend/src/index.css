@@ -26,12 +26,17 @@ body {
   to { transform: rotate(360deg); }
 }
 
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
 .spin {
   animation: spin .7s linear infinite;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 6px;
+  height: 6px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {

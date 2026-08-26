@@ -1,6 +1,6 @@
 // frontend/src/components/admin/TenantTable.tsx
 import React from 'react';
-import { RefreshCw, Wrench, Key, Edit2 } from 'lucide-react';
+import { Wrench, Key, Edit2 } from 'lucide-react';
 import type { TenantConfig } from './types';
 
 interface TenantTableProps {
@@ -29,9 +29,24 @@ export const TenantTable: React.FC<TenantTableProps> = ({
       </div>
 
       {loading ? (
-        <div className="p-12 text-center text-mid flex flex-col items-center gap-3">
-          <RefreshCw className="w-8 h-8 animate-spin text-red" />
-          <span className="text-xs font-bold uppercase tracking-widest">Cargando base de datos de inquilinos...</span>
+        <div className="divide-y divide-white/5 p-2">
+          {Array.from({ length: 3 }).map((_, idx) => (
+            <div key={idx} className="p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-pulse">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 bg-white/10 rounded-xl"></div>
+                <div className="space-y-2">
+                  <div className="h-4 bg-white/15 rounded w-36"></div>
+                  <div className="h-3 bg-white/10 rounded w-48"></div>
+                  <div className="h-2 bg-white/5 rounded w-28"></div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 mt-2 md:mt-0">
+                <div className="h-8 bg-white/10 rounded-xl w-24"></div>
+                <div className="h-8 bg-white/10 rounded-xl w-24"></div>
+                <div className="h-8 bg-white/10 rounded-xl w-20"></div>
+              </div>
+            </div>
+          ))}
         </div>
       ) : tenants.length === 0 ? (
         <div className="p-12 text-center text-mid text-xs">

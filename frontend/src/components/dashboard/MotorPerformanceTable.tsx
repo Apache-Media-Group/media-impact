@@ -30,8 +30,8 @@ export const MotorPerformanceTable: React.FC<MotorPerformanceTableProps> = ({
         </div>
         <div className="text-[10px] text-mid mb-4">Desglose de conversiones configuradas</div>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse min-w-[600px]">
+      <div className="overflow-x-auto custom-scrollbar">
+        <table className="w-full text-left border-collapse min-w-[580px]">
           <thead className="bg-dashboard-bg/50">
             <tr className="text-[10px] font-bold text-mid uppercase tracking-widest">
               <th className="px-5 py-2">Motor</th>

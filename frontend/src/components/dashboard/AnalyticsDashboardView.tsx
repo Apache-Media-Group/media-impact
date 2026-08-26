@@ -55,14 +55,65 @@ export const AnalyticsDashboardView: React.FC<AnalyticsDashboardViewProps> = ({
   const referredPercent = totalSessVal > 0 ? Math.round((aiReferredVal / totalSessVal) * 1000) / 10 : 0;
   const inferredPercent = totalSessVal > 0 ? Math.round((aiInferredVal / totalSessVal) * 1000) / 10 : 0;
   const restPercent = totalSessVal > 0 ? Math.round((restVal / totalSessVal) * 1000) / 10 : 0;
-
   const mainBrandLabel = tenant?.tenant_name || 'Tu Marca';
 
   return (
-    <main ref={dashboardRef} className="flex-1 p-8 space-y-6 max-w-[1400px] mx-auto w-full">
+    <main ref={dashboardRef} className="flex-1 p-4 sm:p-8 space-y-6 max-w-[1400px] mx-auto w-full">
       {exporting && (
         <PdfExportHeader tenant={tenant} fromDate={state.from} toDate={state.to} />
       )}
+
+      {loading && !data ? (
+        <>
+          {/* Skeleton KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-xl p-4 border border-dashboard-border shadow-sm flex flex-col justify-between h-24 animate-pulse">
+                <div className="flex justify-between items-center">
+                  <div className="h-2.5 bg-dashboard-border/60 rounded w-16"></div>
+                  <div className="h-2.5 bg-dashboard-border/40 rounded w-6"></div>
+                </div>
+                <div className="h-6 bg-dashboard-border/50 rounded w-20 mt-auto"></div>
+              </div>
+            ))}
+          </div>
+
+          {/* Skeleton Charts Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="lg:col-span-8 bg-white rounded-xl p-5 border border-dashboard-border shadow-sm h-[320px] animate-pulse flex flex-col justify-between">
+              <div className="h-3 bg-dashboard-border/60 rounded w-32"></div>
+              <div className="h-48 bg-dashboard-border/30 rounded-lg w-full"></div>
+              <div className="h-3 bg-dashboard-border/40 rounded w-48"></div>
+            </div>
+            <div className="lg:col-span-4 bg-white rounded-xl p-5 border border-dashboard-border shadow-sm h-[320px] animate-pulse flex flex-col justify-between">
+              <div className="h-3 bg-dashboard-border/60 rounded w-28"></div>
+              <div className="w-36 h-36 rounded-full border-8 border-dashboard-border/30 mx-auto my-auto"></div>
+              <div className="h-3 bg-dashboard-border/40 rounded w-32 mx-auto"></div>
+            </div>
+          </div>
+
+          {/* Skeleton Tables */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white rounded-xl p-5 border border-dashboard-border shadow-sm h-[260px] animate-pulse flex flex-col gap-4">
+              <div className="h-3 bg-dashboard-border/60 rounded w-40"></div>
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, idx) => (
+                  <div key={idx} className="h-8 bg-dashboard-border/20 rounded w-full"></div>
+                ))}
+              </div>
+            </div>
+            <div className="bg-white rounded-xl p-5 border border-dashboard-border shadow-sm h-[260px] animate-pulse flex flex-col gap-4">
+              <div className="h-3 bg-dashboard-border/60 rounded w-40"></div>
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, idx) => (
+                  <div key={idx} className="h-8 bg-dashboard-border/20 rounded w-full"></div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <>
 
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
@@ -459,6 +510,8 @@ export const AnalyticsDashboardView: React.FC<AnalyticsDashboardViewProps> = ({
               />
             </div>
           )}
+        </>
+      )}
         </>
       )}
     </main>

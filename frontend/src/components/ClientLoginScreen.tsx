@@ -251,7 +251,7 @@ export const ClientLoginScreen: React.FC<ClientLoginScreenProps> = ({
   if (isAccessDenied) {
     // VISTA DE ACCESO DENEGADO (BRANDED PREMIUM)
     return (
-      <div className="fixed inset-0 bg-[#060c18] flex items-center justify-center p-5 z-[1000] overflow-y-auto">
+      <div key="client-access-denied-view" className="fixed inset-0 bg-[#060c18] flex items-center justify-center p-5 z-[1000] overflow-y-auto">
         {/* Fondo con degradado animado y color secundario del cliente */}
         <div 
           className="absolute inset-0 opacity-20 pointer-events-none transition-all duration-1000"
@@ -316,7 +316,7 @@ export const ClientLoginScreen: React.FC<ClientLoginScreenProps> = ({
   if (is2faRequired) {
     // VISTA DE VERIFICACIÓN 2FA OTP (BRANDED PREMIUM)
     return (
-      <div className="fixed inset-0 bg-[#060c18] flex items-center justify-center p-5 z-[1000] overflow-y-auto">
+      <div key="client-2fa-verify-view" className="fixed inset-0 bg-[#060c18] flex items-center justify-center p-5 z-[1000] overflow-y-auto">
         {/* Fondo con degradado animado y color secundario del cliente */}
         <div 
           className="absolute inset-0 opacity-20 pointer-events-none transition-all duration-1000"
@@ -383,7 +383,7 @@ export const ClientLoginScreen: React.FC<ClientLoginScreenProps> = ({
               <div className="relative">
                 <KeyRound className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-mid" />
                 <input 
-                  type="text"
+                  type="text" 
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="000000"
@@ -452,7 +452,7 @@ export const ClientLoginScreen: React.FC<ClientLoginScreenProps> = ({
 
   // VISTA DE LOGIN NORMAL (CON ACCENT COLORS)
   return (
-    <div className="fixed inset-0 bg-[#060c18] flex items-center justify-center p-5 z-[1000] overflow-y-auto">
+    <div key="client-login-form-view" className="fixed inset-0 bg-[#060c18] flex items-center justify-center p-5 z-[1000] overflow-y-auto">
       {/* Luces y degradados ambientales de fondo */}
       <div 
         className="absolute inset-0 opacity-10 pointer-events-none transition-all duration-1000"

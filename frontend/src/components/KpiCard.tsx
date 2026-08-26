@@ -43,9 +43,10 @@ export const KpiCard: React.FC<KpiCardProps> = ({
                   <button 
                     type="button"
                     onClick={() => longTooltip && setIsModalOpen(true)}
-                    className={`focus:outline-none transition-colors ${longTooltip ? 'cursor-pointer hover:text-navy' : 'cursor-help hover:text-navy'} text-mid/60`}
+                    aria-label="Más información"
+                    className={`focus:outline-none transition-colors p-1.5 -m-1.5 rounded-full inline-flex items-center justify-center ${longTooltip ? 'cursor-pointer hover:text-navy hover:bg-dashboard-bg' : 'cursor-help hover:text-navy'} text-mid/70`}
                   >
-                    <Info className="w-3 h-3" />
+                    <Info className="w-3.5 h-3.5" />
                   </button>
                   {tooltip && (
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block w-56 p-2.5 bg-navy text-white text-[10px] normal-case font-normal tracking-normal rounded-lg shadow-xl z-50 pointer-events-none before:content-[''] before:absolute before:top-full before:left-1/2 before:-translate-x-1/2 before:border-4 before:border-transparent before:border-t-navy">
