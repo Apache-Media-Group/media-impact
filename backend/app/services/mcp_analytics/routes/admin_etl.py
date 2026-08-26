@@ -18,6 +18,7 @@ from app.services.mcp_analytics.bigquery_service import BigQueryService
 
 from app.services.mcp_analytics.routes.dependencies import (
     get_current_admin,
+    get_admin_or_scheduler,
     get_token_manager,
     get_secret_manager_service
 )
@@ -93,6 +94,7 @@ def create_or_update_tenant_scheduler(tenant_id: str):
     """
     try:
         from google.cloud import scheduler_v1
+        from google.protobuf import duration_pb2
         client = scheduler_v1.CloudSchedulerClient()
         
         project_id = os.getenv("GCP_PROJECT_ID") or "llyc-ai-first-core"
@@ -102,8 +104,17 @@ def create_or_update_tenant_scheduler(tenant_id: str):
         job_id = f"mcp-analytics-{tenant_id}-etl-daily"
         job_name = f"{parent}/jobs/{job_id}"
         
-        # URI de nuestro Cloud Run
-        uri = f"https://llyc-intelligence-api-mz6ut5biaa-uc.a.run.app/api/v1/mcp-analytics/admin/etl/trigger"
+        # URI dinámica: usa variable de entorno de Cloud Run o dominio canónico de producción
+        api_base = os.getenv("API_BASE_URL") or os.getenv("CLOUD_RUN_SERVICE_URL") or "https://dashboard.llyc.global"
+        api_base = api_base.rstrip("/")
+        uri = f"{api_base}/api/v1/mcp-analytics/admin/etl/trigger"
+        
+        cron_secret = os.getenv("CRON_SECRET") or os.getenv("SECRET_KEY") or f"mcp-scheduler-{project_id}"
+        headers = {
+            "Content-Type": "application/json",
+            "X-CloudScheduler": "true",
+            "X-Cron-Secret": cron_secret
+        }
         
         # Construir el job
         job = scheduler_v1.Job(
@@ -112,11 +123,12 @@ def create_or_update_tenant_scheduler(tenant_id: str):
             http_target=scheduler_v1.HttpTarget(
                 uri=uri,
                 http_method=scheduler_v1.HttpMethod.POST,
-                headers={"Content-Type": "application/json"},
+                headers=headers,
                 body=f'{{"tenant_id": "{tenant_id}"}}'.encode("utf-8")
             ),
             schedule="0 3 * * *",
-            time_zone="UTC"
+            time_zone="UTC",
+            attempt_deadline=duration_pb2.Duration(seconds=540)
         )
         
         try:
@@ -805,20 +817,12 @@ async def upload_tenant_logo_admin(
         logger.error(f"Error al subir logotipo de tenant en admin: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/admin/etl/trigger", response_model=Dict[str, Any])
-async def trigger_tenant_etl_admin(
-    req: ETLTriggerRequest,
-    user_email: str = Depends(get_current_admin),
-    sms: SecretManagerService = Depends(get_secret_manager_service)
-):
+async def run_etl_sync_background(tenant_id: str, historical_backfill: bool, triggered_by: str):
     """
-    Desencadena de manera manual o programada (Cloud Scheduler) la ingesta ETL de un cliente.
-    Descarga el histórico, limpia duplicados y lo inserta de manera limpia en BigQuery.
+    Ejecuta la sincronización ETL en segundo plano y persiste el resultado en la colección 'etl_runs' de Firestore.
     """
     try:
-        tenant_id = req.tenant_id.lower().strip()
-        
-        # 1. Recuperar todas las credenciales activas del tenant desde Secret Manager
+        sms = SecretManagerService()
         credentials = {}
         secret_types = ["brandlight-key", "peec-key", "ga4-creds", "adobe-creds"]
         for st in secret_types:
@@ -826,28 +830,80 @@ async def trigger_tenant_etl_admin(
             if val:
                 credentials[st] = val
                 
-        # 2. Definir ventana de tiempo (backfill histórico de 90 días vs incremento diario de 2 días)
-        if req.historical_backfill:
+        if historical_backfill:
             date_from = (datetime.utcnow() - timedelta(days=90)).strftime("%Y-%m-%d")
         else:
             date_from = (datetime.utcnow() - timedelta(days=2)).strftime("%Y-%m-%d")
             
         date_to = datetime.utcnow().strftime("%Y-%m-%d")
         
-        # 3. Lanzar la ETL de forma asíncrona
         etl = MCPETLService(tenant_id=tenant_id)
-        
-        # Ejecutar sincronización
         sync_result = await etl.run_full_sync(
             credentials=credentials,
             date_from=date_from,
             date_to=date_to
         )
         
+        # Registrar corrida exitosa en Firestore
+        tm = TokenManager()
+        if tm.db:
+            run_doc = {
+                "tenant_id": tenant_id,
+                "triggered_by": triggered_by,
+                "status": "success",
+                "date_from": date_from,
+                "date_to": date_to,
+                "historical_backfill": historical_backfill,
+                "completed_at": datetime.utcnow().isoformat(),
+                "details": sync_result
+            }
+            tm.db.collection("etl_runs").add(run_doc)
+            
+        logger.info(f"✅ ETL en segundo plano completada con éxito para '{tenant_id}'.")
+    except Exception as e:
+        logger.error(f"❌ Error en ETL en segundo plano para '{tenant_id}': {e}")
+        try:
+            tm = TokenManager()
+            if tm.db:
+                tm.db.collection("etl_runs").add({
+                    "tenant_id": tenant_id,
+                    "triggered_by": triggered_by,
+                    "status": "failed",
+                    "error": str(e),
+                    "completed_at": datetime.utcnow().isoformat()
+                })
+        except Exception as log_e:
+            logger.error(f"No se pudo registrar el fallo de ETL en Firestore: {log_e}")
+
+
+@router.post("/admin/etl/trigger", response_model=Dict[str, Any])
+async def trigger_tenant_etl_admin(
+    req: ETLTriggerRequest,
+    background_tasks: BackgroundTasks,
+    caller: str = Depends(get_admin_or_scheduler)
+):
+    """
+    Desencadena de manera manual (UI Admin) o programada (Cloud Scheduler) la ingesta ETL de un cliente.
+    Se despacha como tarea asíncrona de BackgroundTasks para evitar timeouts HTTP en Cloud Scheduler.
+    """
+    try:
+        tenant_id = req.tenant_id.lower().strip()
+        logger.info(f"🚀 Desencadenando ETL para tenant '{tenant_id}' (Triggered by: {caller}, Backfill: {req.historical_backfill})")
+        
+        # Encolar ejecución en segundo plano
+        background_tasks.add_task(
+            run_etl_sync_background,
+            tenant_id=tenant_id,
+            historical_backfill=req.historical_backfill,
+            triggered_by=caller
+        )
+        
         return {
-            "status": "success",
-            "message": f"ETL completada para el tenant '{tenant_id}'.",
-            "sync_details": sync_result
+            "status": "accepted",
+            "message": f"Ingesta ETL encolada en segundo plano para el cliente '{tenant_id}'.",
+            "tenant_id": tenant_id,
+            "triggered_by": caller,
+            "historical_backfill": req.historical_backfill
         }
         
     except Exception as e:

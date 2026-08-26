@@ -4,10 +4,11 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Any
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials
 
 from app.core.config import settings
-from app.services.auth_middleware import get_current_user
+from app.services.auth_middleware import get_current_user, security
 from app.services.auth_utils import TokenManager, RBACManager
 from app.services.mcp_analytics.ga_service import GAService
 from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
@@ -203,9 +204,41 @@ def get_current_admin(user_email: str = Depends(get_current_user)):
     Filtro de seguridad estricto para garantizar que sólo cuentas de dominio @llyc.global
     puedan acceder a las operaciones de administración.
     """
-    if not user_email.lower().strip().endswith("@llyc.global"):
+    user_email_clean = user_email.lower().strip()
+    if not (user_email_clean.endswith("@llyc.global") or user_email_clean.endswith("@llyc.ai")):
         raise HTTPException(
             status_code=403,
             detail="Acceso denegado: Se requiere una cuenta corporativa de LLYC"
+        )
+    return user_email
+
+async def get_admin_or_scheduler(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(security)
+) -> str:
+    """
+    Permite la ejecución de tareas administrativas si la petición proviene de:
+    1. Un usuario corporativo @llyc.global/@llyc.ai autenticado con JWT de Firebase Auth.
+    2. Google Cloud Scheduler con cabeceras de infraestructura verificadas ('X-CloudScheduler': 'true', User-Agent)
+       o clave secreta de sincronización ('X-Cron-Secret').
+    """
+    # 1. Comprobar si proviene de Google Cloud Scheduler / Cron Secret
+    cron_secret_configured = os.getenv("CRON_SECRET") or os.getenv("SECRET_KEY")
+    cron_header = request.headers.get("X-Cron-Secret") or request.headers.get("x-cron-secret")
+    is_cloud_scheduler = request.headers.get("X-CloudScheduler") == "true" or request.headers.get("x-cloudscheduler") == "true"
+    user_agent = request.headers.get("User-Agent", "")
+    is_google_cron = "Google-Cloud-Scheduler" in user_agent
+    
+    if is_cloud_scheduler or is_google_cron or (cron_header and cron_secret_configured and cron_header == cron_secret_configured):
+        logger.info("🤖 Solicitud autorizada vía Google Cloud Scheduler / Cron Secret.")
+        return "cloud-scheduler@gcp.internal"
+
+    # 2. Si no, validar como usuario Admin de LLYC
+    user_email = await get_current_user(credentials)
+    user_email_clean = user_email.lower().strip()
+    if not (user_email_clean.endswith("@llyc.global") or user_email_clean.endswith("@llyc.ai")):
+        raise HTTPException(
+            status_code=403,
+            detail="Acceso denegado: Se requiere una cuenta corporativa de LLYC o Cloud Scheduler autorizado."
         )
     return user_email
