@@ -106,3 +106,15 @@ La plataforma se despliega automáticamente en **Google Cloud Platform (GCP)** u
    ```bash
    npm run dev
    ```
+
+---
+
+## 📚 Documentación Oficial
+
+Toda la documentación técnica, estratégica y metodológica de la plataforma reside en la carpeta **`/documentacion/`**. Ante cualquier duda, consulta los siguientes directorios:
+
+* **`/documentacion/manuales_de_uso/`**: Manuales operativos para el usuario final (Cliente) y para los Superadministradores de LLYC.
+* **`/documentacion/arquitectura/`**: Documentación profunda sobre el diseño técnico, la arquitectura de microservicios y guías de infraestructura (DevOps/DNS).
+* **`/documentacion/troubleshooting/`**: Guías de resolución de problemas, manejo de errores de APIs (ej. 403, 429), y documentación extendida sobre la integración de Google Analytics 4, Adobe Analytics, Peec.ai y Brandlight.
+* **`/documentacion/objetivos/`**: Roadmap del producto (Brandlight) y bitácoras de sugerencias de mejoras.
+* **`/documentacion/metodologias/`**: Diccionarios de datos detallados (legacy y actual) y explicaciones de las matemáticas implementadas (Sniper Score, Share of Voice).

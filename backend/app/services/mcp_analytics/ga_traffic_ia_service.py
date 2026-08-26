@@ -37,7 +37,7 @@ class GATrafficIAService:
             "utm_source=chatbot", "utm_medium=referral_ai"
         ]
 
-    async def analyze_traffic_ia(self, property_id: str, date_range: Dict[str, str], language: str = "es") -> Dict[str, Any]:
+    async def analyze_traffic_ia(self, property_id: str, date_range: Dict[str, str], language: str = "es", conversion_events: List[str] = None) -> Dict[str, Any]:
         """
         Ejecuta el análisis avanzado de 'Audit de Audiencia IA' para GA4.
         """
@@ -65,7 +65,43 @@ class GATrafficIAService:
         
         s_baseline = CalculationService.calculate_sniper_score(total_conv, avg_dur_base, pages_base)
         
-        battle_of_ais = self._analyze_battle_of_ais(df_aggregated, s_baseline)
+        conversion_breakdown = None
+        if conversion_events:
+            from google.analytics.data_v1beta.types import FilterExpressionList, FilterExpression, Filter
+            event_filters = [FilterExpression(filter=Filter(field_name="eventName", string_filter=Filter.StringFilter(value=ev.strip(), match_type=Filter.StringFilter.MatchType.EXACT))) for ev in conversion_events if ev.strip()]
+            if event_filters:
+                event_or_group = FilterExpression(or_group=FilterExpressionList(expressions=event_filters))
+                request = RunReportRequest(
+                    property=property_id,
+                    date_ranges=[DateRange(start_date=date_range["start_date"], end_date=date_range["end_date"])],
+                    dimensions=[Dimension(name="sessionSource"), Dimension(name="eventName")],
+                    metrics=[Metric(name="eventCount")],
+                    dimension_filter=event_or_group
+                )
+                try:
+                    response = self.client.run_report(request)
+                    conversion_breakdown = {}
+                    def normalize_name(s):
+                        if "openai" in s or "chatgpt" in s: return "ChatGPT"
+                        if "copilot" in s: return "Copilot"
+                        if "gemini" in s or "bard" in s: return "Gemini"
+                        if "perplexity" in s: return "Perplexity"
+                        if "claude" in s or "anthropic" in s: return "Claude"
+                        return "Other AI"
+                        
+                    for row in response.rows:
+                        source = row.dimension_values[0].value.lower()
+                        event_name = row.dimension_values[1].value
+                        count = int(row.metric_values[0].value)
+                        if any(ref in source for ref in self.ai_referrers):
+                            ai_platform = normalize_name(source)
+                            if ai_platform not in conversion_breakdown:
+                                conversion_breakdown[ai_platform] = {}
+                            conversion_breakdown[ai_platform][event_name] = conversion_breakdown[ai_platform].get(event_name, 0) + count
+                except Exception as e:
+                    logger.error(f"Error fetching conversion breakdown: {e}")
+                    
+        battle_of_ais = self._analyze_battle_of_ais(df_aggregated, s_baseline, conversion_breakdown)
         battle_of_ais_total_sessions = sum(item['sessions'] for item in battle_of_ais)
         
         # --- CORRECCIÓN: Clusters sobre sesiones IA ---
@@ -131,8 +167,10 @@ class GATrafficIAService:
             else: logger.warning("GEMINI_API_KEY not found.")
         except Exception as e: logger.error(f"Gemini GA4 error: {e}")
 
+        known_ia_conversions = sum(item['conversions'] for item in battle_of_ais)
+        
         # --- NUEVO: Índice de Confianza Dinámico ---
-        confidence_index = CalculationService.calculate_confidence_index(known_ia_sessions, total_sessions)
+        confidence_index = CalculationService.calculate_confidence_index(known_ia_sessions, total_sessions, known_ia_conversions)
         
         return self._safe_serialize({
             "battle_of_ais": battle_of_ais,
@@ -249,7 +287,7 @@ class GATrafficIAService:
         df['ai_platform'] = df.apply(lambda r: normalize_name(r['source']) if r['is_known_ai'] else None, axis=1)
         return df
 
-    def _analyze_battle_of_ais(self, df: pd.DataFrame, s_baseline: float = 1.0) -> List[Dict]:
+    def _analyze_battle_of_ais(self, df: pd.DataFrame, s_baseline: float = 1.0, conversion_breakdown: Dict = None) -> List[Dict]:
         ai_df = df[df['is_known_ai']].copy()
         if ai_df.empty: return []
         results = []
@@ -275,7 +313,7 @@ class GATrafficIAService:
             
             final_label = ratio_label if sess < 10 else f"{relative_ratio}x — {ratio_label}"
             
-            results.append({
+            res_item = {
                 "platform": platform, 
                 "sessions": int(sess), 
                 "avg_duration": dur_str, 
@@ -285,7 +323,11 @@ class GATrafficIAService:
                 "engagement_score": sniper,
                 "relative_ratio": relative_ratio,
                 "ratio_label": final_label
-            })
+            }
+            if conversion_breakdown and platform in conversion_breakdown:
+                res_item["conversion_breakdown"] = conversion_breakdown[platform]
+                
+            results.append(res_item)
             
         return sorted(results, key=lambda x: x['sessions'], reverse=True)
 
@@ -338,7 +380,19 @@ class GATrafficIAService:
         for _, r in top.iterrows():
             s, d = int(r['sessions']), float(r['userEngagementDuration'])
             m, sc = divmod(int(d), 60)
-            res.append({"landing_page": str(r['landing_page']), "sessions": s, "share_ia": f"{round((s/total_ai_sessions)*100, 1) if total_ai_sessions>0 else 0}%", "avg_duration": f"{m:02d}:{sc:02d}" if d>=60 else f"{int(d)}s", "cluster": str(r['cluster'])})
+            
+            # Find the AI breakdown for this landing page
+            lp_df = ai_known_df[ai_known_df['landing_page'] == r['landing_page']]
+            platform_breakdown = lp_df.groupby('ai_platform')['sessions'].sum().to_dict()
+            
+            res.append({
+                "landing_page": str(r['landing_page']), 
+                "sessions": s, 
+                "share_ia": f"{round((s/total_ai_sessions)*100, 1) if total_ai_sessions>0 else 0}%", 
+                "avg_duration": f"{m:02d}:{sc:02d}" if d>=60 else f"{int(d)}s", 
+                "cluster": str(r['cluster']),
+                "platform_breakdown": {str(k): int(v) for k, v in platform_breakdown.items()}
+            })
         return res
 
     def _calculate_sniper_score(self, conversion_rate: float, avg_duration: float, pages_per_session: float, engaged_sessions: int = 0, total_sessions: int = 1) -> float:

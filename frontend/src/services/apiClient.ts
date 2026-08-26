@@ -1,7 +1,7 @@
 // frontend/src/services/apiClient.ts - Secure HTTP API Client Wrapper
 import { auth } from '../firebase';
 
-export const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+export const API_BASE_URL = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') 
   ? 'http://localhost:8080' 
   : '';
 
@@ -13,7 +13,7 @@ export const API_BASE_URL = window.location.hostname === 'localhost' || window.l
  */
 export async function secureFetch(url: string, options: RequestInit = {}): Promise<Response> {
   let finalUrl = url;
-  if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     // En producción, si la URL es relativa y empieza con /api/, anteponer /media-impact
     if (!url.startsWith('http') && url.startsWith('/api/')) {
       finalUrl = `/media-impact${url}`;

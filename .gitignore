@@ -2,8 +2,9 @@ __pycache__/
 *.pyc
 .env
 .DS_Store
-tests/
-tests/.env
+.pytest_cache/
+/tests/
+/tests/.env
 **/.env
 **/tests/.env
 
@@ -20,8 +21,16 @@ ga4_history.db
 venv/
 .venv/
 env/
+backend/scratch/
 
-# Log files
+# Coverage and testing artifacts
+.coverage
+coverage/
+frontend/coverage/
+
+# Local keys, logs and notes
+keys/
+comments/
 *.log
 backend.log
 frontend.log

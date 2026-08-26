@@ -108,6 +108,7 @@ class TrafficIARequest(BaseModel):
     session_id: Optional[str] = None
     connection_id: Optional[str] = None
     segment_id: Optional[str] = None
+    tenant_id: Optional[str] = None
 
 
 class TrafficIABattleItem(BaseModel):
@@ -161,6 +162,7 @@ class TrafficIAContentAffinity(BaseModel):
     sessions: int
     avg_duration: Union[float, str]
     share_ia: Optional[str] = None
+    platform_breakdown: Optional[Dict[str, int]] = None
 
 class TrafficIADailyTrend(BaseModel):
     date: str

@@ -4,13 +4,14 @@ from typing import List
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request, Depends
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional
 
 from app.services.auth_utils import TokenManager
 from app.services.mcp_analytics.secret_manager_service import SecretManagerService
+from app.services.mcp_analytics.routes.dependencies import get_token_manager, get_secret_manager_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -27,7 +28,9 @@ async def create_ga4_connection(
     request: Request,
     name: str = Form(...),
     type: str = Form("service_account"),
-    file: Optional[UploadFile] = File(None)
+    file: Optional[UploadFile] = File(None),
+    tm: TokenManager = Depends(get_token_manager),
+    secret_service: SecretManagerService = Depends(get_secret_manager_service)
 ):
     """
     Crea una nueva conexión global a GA4 subiendo un Service Account JSON.
@@ -50,9 +53,6 @@ async def create_ga4_connection(
             connection_id = f"{safe_email_prefix}-{timestamp}"
             
             # 1. Guardar el JSON en Secret Manager
-            secret_service = SecretManagerService()
-            # Usamos "global" como tenant_id y f"ga4-conn-{connection_id}" como secret_type
-            # Para que el ID resultante sea llyc-mcp-global-ga4-conn-...
             secret_saved = secret_service.save_tenant_secret(
                 tenant_id="global",
                 secret_type=f"ga4-conn-{connection_id}",
@@ -63,7 +63,6 @@ async def create_ga4_connection(
                 raise HTTPException(status_code=500, detail="Error al guardar el Service Account en GCP Secret Manager.")
                 
             # 2. Guardar los metadatos en Firestore
-            tm = TokenManager()
             if not tm.db:
                 raise HTTPException(status_code=500, detail="No hay conexión a la base de datos Firestore.")
                 
@@ -146,12 +145,11 @@ async def create_ga4_connection(
         raise HTTPException(status_code=500, detail=f"Error interno del servidor: {str(e)}")
 
 @router.get("/connections/ga4", response_model=List[GA4ConnectionResponse])
-async def list_ga4_connections():
+async def list_ga4_connections(tm: TokenManager = Depends(get_token_manager)):
     """
     Devuelve la lista de metadatos de las conexiones globales de GA4 configuradas.
     """
     try:
-        tm = TokenManager()
         if not tm.db:
             raise HTTPException(status_code=500, detail="No hay conexión a la base de datos Firestore.")
             
@@ -170,14 +168,16 @@ async def list_ga4_connections():
         raise HTTPException(status_code=500, detail="Error interno al listar conexiones.")
 
 @router.get("/connections/ga4/{connection_id}/properties")
-async def list_ga4_properties(connection_id: str):
+async def list_ga4_properties(
+    connection_id: str,
+    secret_service: SecretManagerService = Depends(get_secret_manager_service)
+):
     """
     Recupera el Service Account de Secret Manager y utiliza la API de GA4 Admin
     para listar las cuentas y propiedades accesibles.
     """
     try:
         # 1. Obtener el JSON desde Secret Manager
-        secret_service = SecretManagerService()
         secret_value = secret_service.get_tenant_secret(
             tenant_id="global",
             secret_type=f"ga4-conn-{connection_id}"
@@ -238,7 +238,9 @@ async def oauth_callback(
     request: Request,
     state: str,
     code: str = None,
-    error: str = None
+    error: str = None,
+    tm: TokenManager = Depends(get_token_manager),
+    secret_service: SecretManagerService = Depends(get_secret_manager_service)
 ):
     """
     Callback para el flujo de OAuth 2.0 (3-Legged).
@@ -258,7 +260,6 @@ async def oauth_callback(
         return RedirectResponse(f"{base_url}/#admin")
         
     try:
-        tm = TokenManager()
         if not tm.db:
             raise Exception("No DB connection")
             
@@ -307,7 +308,6 @@ async def oauth_callback(
             "token_uri": credentials.token_uri
         }
         
-        secret_service = SecretManagerService()
         secret_saved = secret_service.save_tenant_secret(
             tenant_id="global",
             secret_type=f"ga4-conn-{connection_id}",

@@ -335,26 +335,39 @@ class CalculationService:
     @staticmethod
     def calculate_confidence_index(
         known_ai_sessions: int,
-        total_sessions: int
+        total_sessions: int,
+        conversions: int = 0
     ) -> Dict[str, Any]:
         """
-        Calcula el Índice de Confianza dinámico del análisis.
+        Calcula el Índice de Confianza dinámico del análisis usando la aproximación Normal a la Binomial.
         
         Formula: Confianza = (Factor_volumen * 0.70) + (Factor_ratio * 0.30)
+        Condición matemática: n >= 30, n*p >= 5, n*(1-p) >= 5
         
         Args:
-            known_ai_sessions (n): Sesiones IA referidas conocidas
+            known_ai_sessions (n): Sesiones IA referidas conocidas (tamaño de la muestra)
             total_sessions (U): Total sesiones del site
+            conversions (c): Número de conversiones en la muestra
             
         Returns:
-            Dict: Con score (0-1), label (Baja, Media, Alta) y explicación.
+            Dict: Con score (0-1), label (Baja, Media, Alta), razón y validez estadística.
         """
         n = int(known_ai_sessions)
         u = int(total_sessions)
+        c = int(conversions)
         
-        if u == 0:
-            return {"score": 0.0, "label": "Baja", "percentage": "0%"}
+        if u == 0 or n == 0:
+            return {"score": 0.0, "label": "Baja", "percentage": "0%", "reason": "Sin datos", "is_significant": False}
             
+        p = c / n
+        successes = n * p
+        failures = n * (1 - p)
+        
+        # Validación estadística (Teorema Límite Central para proporciones)
+        # Relajamos temporalmente los éxitos en casos de n muy alto pero p muy bajo, 
+        # pero mantenemos la regla para validar si segmentar rompe la muestra.
+        is_statistically_significant = n >= 30 and successes >= 5 and failures >= 5
+        
         # Factor Volumen (techo en 1000 sesiones, peso 70%)
         factor_volumen = min(n / 1000.0, 1.0)
         
@@ -362,6 +375,12 @@ class CalculationService:
         factor_ratio = min((n / u) / 0.05, 1.0)
         
         confidence_score = (factor_volumen * 0.70) + (factor_ratio * 0.30)
+        
+        if not is_statistically_significant:
+            confidence_score = min(confidence_score, 0.29)  # Forzar a "Baja" si la varianza es muy alta
+            reason = "Muestra insuficiente para inferencia estadística confiable (n < 30 o n*p < 5)"
+        else:
+            reason = "Muestra estadísticamente significativa"
         
         label = "Baja"
         if confidence_score > 0.60:
@@ -374,7 +393,9 @@ class CalculationService:
             "label": label,
             "percentage": f"{round(confidence_score * 100, 1)}%",
             "known_ai_sessions": n,
-            "total_sessions": u
+            "total_sessions": u,
+            "is_significant": is_statistically_significant,
+            "reason": reason
         }
 
     @staticmethod

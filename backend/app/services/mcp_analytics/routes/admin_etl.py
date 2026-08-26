@@ -16,7 +16,11 @@ from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
 from app.services.mcp_analytics.gcs_service import GCSService
 from app.services.mcp_analytics.bigquery_service import BigQueryService
 
-from app.services.mcp_analytics.routes.dependencies import get_current_admin
+from app.services.mcp_analytics.routes.dependencies import (
+    get_current_admin,
+    get_token_manager,
+    get_secret_manager_service
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -33,6 +37,7 @@ class TenantAdminRequest(BaseModel):
     support_email: str = Field(..., description="Email de soporte del cliente")
     authorized_emails: List[str] = Field(default=[], description="Lista de correos autorizados para este tenant")
     authorized_domains: List[str] = Field(default=[], description="Lista de dominios de correo corporativos autorizados")
+    ga4_conversion_events: List[str] = Field(default=[], description="Eventos de conversión GA4 (ej. purchase, generate_lead)")
 
 
 class TenantSecretRequest(BaseModel):
@@ -168,20 +173,22 @@ async def run_historical_backfill_task(tenant_id: str):
 # --- Endpoints ---
 
 @router.get("/admin/tenants", response_model=List[Dict[str, Any]])
-async def list_tenants_admin(user_email: str = Depends(get_current_admin)):
+async def list_tenants_admin(
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager),
+    sms: SecretManagerService = Depends(get_secret_manager_service)
+):
     """
     Lista todos los tenants creados en Firestore (Solo Superadmin LLYC).
     Soporta backfill automático y cacheado de configuración de secretos de GCP Secret Manager.
     """
     try:
-        tm = TokenManager()
         if not tm.db:
             return []
             
         tenants_ref = tm.db.collection("tenants")
         docs = tenants_ref.stream()
         tenants = []
-        sms = SecretManagerService()
         
         for doc in docs:
             tdata = doc.to_dict()
@@ -227,6 +234,8 @@ async def list_tenants_admin(user_email: str = Depends(get_current_admin)):
                 tdata["authorized_emails"] = []
             if "authorized_domains" not in tdata or not isinstance(tdata["authorized_domains"], list):
                 tdata["authorized_domains"] = []
+            if "ga4_conversion_events" not in tdata or not isinstance(tdata["ga4_conversion_events"], list):
+                tdata["ga4_conversion_events"] = []
                 
             tenants.append(tdata)
 
@@ -239,13 +248,13 @@ async def list_tenants_admin(user_email: str = Depends(get_current_admin)):
 @router.post("/admin/tenants", response_model=Dict[str, Any])
 async def create_or_update_tenant_admin(
     tenant_req: TenantAdminRequest,
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager)
 ):
     """
     Crea o actualiza la configuración de marca de un tenant en Firestore (Solo Superadmin LLYC).
     """
     try:
-        tm = TokenManager()
         tenant_id = tenant_req.tenant_id.lower().strip()
         
         tenant_data = {
@@ -258,6 +267,7 @@ async def create_or_update_tenant_admin(
             "support_email": tenant_req.support_email,
             "authorized_emails": [e.lower().strip() for e in tenant_req.authorized_emails if e.strip()],
             "authorized_domains": [d.lower().strip() for d in tenant_req.authorized_domains if d.strip()],
+            "ga4_conversion_events": [e.lower().strip() for e in tenant_req.ga4_conversion_events if e.strip()],
             "updated_by": user_email,
             "updated_at": datetime.utcnow().isoformat()
         }
@@ -304,7 +314,9 @@ async def save_tenant_secret_admin(
     tenant_id: str,
     secret_req: TenantSecretRequest,
     background_tasks: BackgroundTasks,
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager),
+    sms: SecretManagerService = Depends(get_secret_manager_service)
 ):
     """
     Guarda y encripta una clave sensible de un cliente (ej: Brandlight API Key)
@@ -312,8 +324,6 @@ async def save_tenant_secret_admin(
     Desencadena de forma automatizada el Cloud Scheduler del cliente y un Backfill histórico de 90 días en segundo plano.
     """
     try:
-        sms = SecretManagerService()
-
         tenant_id_clean = tenant_id.lower().strip()
         secret_type_clean = secret_req.secret_type.lower().strip()
 
@@ -331,7 +341,6 @@ async def save_tenant_secret_admin(
             raise Exception("No se pudo persistir el secreto en GCP Secret Manager.")
 
         # 2. Actualizar de forma automatizada en Firestore que este secreto ya está configurado (cacheado de metadata)
-        tm = TokenManager()
         if tm.db:
             tenant_ref = tm.db.collection("tenants").document(tenant_id_clean)
             tenant_doc = tenant_ref.get()
@@ -364,7 +373,8 @@ async def save_tenant_secret_admin(
 async def get_tenant_secret_options_admin(
     tenant_id: str,
     secret_type: str,
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    sms: SecretManagerService = Depends(get_secret_manager_service)
 ):
     """
     Recupera la llave guardada y consulta la respectiva API analítica para retornar 
@@ -372,7 +382,6 @@ async def get_tenant_secret_options_admin(
     sin enviar la llave API real al frontend.
     """
     try:
-        sms = SecretManagerService()
         tenant_id_clean = tenant_id.lower().strip()
         secret_type_clean = secret_type.lower().strip()
 
@@ -747,7 +756,8 @@ async def redeploy_tenant_etl_admin(
 async def upload_tenant_logo_admin(
     tenant_id: str,
     file: UploadFile = File(...),
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager)
 ):
     """
     Sube un archivo de logotipo (SVG o PNG) corporativo de un cliente directamente
@@ -779,7 +789,6 @@ async def upload_tenant_logo_admin(
             raise Exception("Error al subir el logotipo a Google Cloud Storage.")
             
         # Si Firestore está disponible, actualizar de forma automática el logo_url del tenant
-        tm = TokenManager()
         if tm.db:
             tm.db.collection("tenants").document(tenant_id_clean).set({"logo_url": public_url}, merge=True)
             logger.info(f"Firestore actualizado con la nueva logo_url de GCS para el tenant '{tenant_id_clean}'.")
@@ -799,7 +808,8 @@ async def upload_tenant_logo_admin(
 @router.post("/admin/etl/trigger", response_model=Dict[str, Any])
 async def trigger_tenant_etl_admin(
     req: ETLTriggerRequest,
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    sms: SecretManagerService = Depends(get_secret_manager_service)
 ):
     """
     Desencadena de manera manual o programada (Cloud Scheduler) la ingesta ETL de un cliente.
@@ -809,8 +819,6 @@ async def trigger_tenant_etl_admin(
         tenant_id = req.tenant_id.lower().strip()
         
         # 1. Recuperar todas las credenciales activas del tenant desde Secret Manager
-        sms = SecretManagerService()
-        
         credentials = {}
         secret_types = ["brandlight-key", "peec-key", "ga4-creds", "adobe-creds"]
         for st in secret_types:
@@ -847,12 +855,14 @@ async def trigger_tenant_etl_admin(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/admin/etl/history", response_model=List[Dict[str, Any]])
-async def list_etl_history_admin(user_email: str = Depends(get_current_admin)):
+async def list_etl_history_admin(
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager)
+):
     """
     Recupera el historial de ejecuciones de ETL para todos los inquilinos desde Firestore (Solo Superadmin LLYC).
     """
     try:
-        tm = TokenManager()
         if not tm.db:
             return []
             
@@ -869,12 +879,14 @@ async def list_etl_history_admin(user_email: str = Depends(get_current_admin)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/admin/etl/alerts", response_model=List[Dict[str, Any]])
-async def list_etl_alerts_admin(user_email: str = Depends(get_current_admin)):
+async def list_etl_alerts_admin(
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager)
+):
     """
     Lista las alertas activas de fallos en el proceso ETL desde Firestore (Solo Superadmin LLYC).
     """
     try:
-        tm = TokenManager()
         if not tm.db:
             return []
             
@@ -896,13 +908,13 @@ async def list_etl_alerts_admin(user_email: str = Depends(get_current_admin)):
 @router.post("/admin/etl/alerts/{alert_id}/dismiss", response_model=Dict[str, Any])
 async def dismiss_etl_alert_admin(
     alert_id: str,
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager)
 ):
     """
     Marca una alerta de ETL como resuelta/descartada en Firestore (Solo Superadmin LLYC).
     """
     try:
-        tm = TokenManager()
         if tm.db:
             alert_ref = tm.db.collection("etl_alerts").document(alert_id)
             alert_ref.update({
@@ -1001,7 +1013,9 @@ async def patch_tenant_data_gaps_admin(
 async def configure_ga4_multi_property_admin(
     tenant_id: str,
     req: GA4MultiPropertyRequest,
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager),
+    sms: SecretManagerService = Depends(get_secret_manager_service)
 ):
     """
     Configura de forma encriptada una conexión GA4 (basada en Service Account) y 
@@ -1017,7 +1031,6 @@ async def configure_ga4_multi_property_admin(
         tenant_id_clean = tenant_id.lower().strip()
         
         # 1. Recuperar el secreto de la conexión global
-        sms = SecretManagerService()
         global_secret = sms.get_tenant_secret("global", f"ga4-conn-{connection_id}")
         if not global_secret:
             raise HTTPException(status_code=404, detail="La conexión global de GA4 seleccionada no existe.")
@@ -1037,7 +1050,6 @@ async def configure_ga4_multi_property_admin(
         )
         
         # 3. Actualizar Firestore
-        tm = TokenManager()
         if tm.db:
             tm.db.collection("tenants").document(tenant_id_clean).set({
                 "configured_secrets": {

@@ -1,6 +1,6 @@
 # backend/app/services/mcp_analytics/routes/tenant.py
 import logging
-from typing import Optional
+from typing import Optional, List
 
 from fastapi import APIRouter, Request, Query, HTTPException, Depends, Response
 from pydantic import BaseModel
@@ -8,6 +8,7 @@ import urllib.request
 
 from app.services.auth_utils import TokenManager
 from app.services.auth_middleware import get_current_user, verify_tenant_access
+from app.services.mcp_analytics.routes.dependencies import get_token_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -22,9 +23,14 @@ class TenantConfigResponse(BaseModel):
     font_family: str
     support_email: str
     configured_secrets: Optional[dict] = None
+    ga4_conversion_events: Optional[List[str]] = None
 
 @router.get("/tenant/config", response_model=TenantConfigResponse)
-async def get_tenant_config(request: Request, tenant: Optional[str] = Query(None)):
+async def get_tenant_config(
+    request: Request, 
+    tenant: Optional[str] = Query(None),
+    tm: TokenManager = Depends(get_token_manager)
+):
     """
     Obtiene la configuración visual y de branding de forma dinámica según el subdominio
     o parámetro de consulta (estrategia híbrida), consultando en Firestore con fallback a local.
@@ -49,7 +55,6 @@ async def get_tenant_config(request: Request, tenant: Optional[str] = Query(None
         
     # 4. Intentar consultar la configuración en vivo en Firestore
     try:
-        tm = TokenManager()
         if tm.db:
             doc = tm.db.collection("tenants").document(detected_tenant).get()
             if doc.exists:
@@ -67,7 +72,8 @@ async def get_tenant_config(request: Request, tenant: Optional[str] = Query(None
             "primary_color": "#E51D24", # Rojo LLYC
             "secondary_color": "#1C2541", # Azul LLYC
             "font_family": "Montserrat, sans-serif",
-            "support_email": "intelligence.mcp@llyc.global"
+            "support_email": "intelligence.mcp@llyc.global",
+            "ga4_conversion_events": ["generate_lead", "form_submit", "book_appointment"]
         }
     }
     

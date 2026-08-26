@@ -31,7 +31,7 @@ else
     fi
 fi
 
-ACTIVE_PROJECT=$(gcloud config get-value project 2>/dev/null || echo "llyc-ai-first-core")
+ACTIVE_PROJECT="llyc-ai-first-core"
 echo "✅ Proyecto GCP activo: $ACTIVE_PROJECT"
 
 # Exportamos explícitamente la Service Account de pruebas para que la API tenga permisos de lectura

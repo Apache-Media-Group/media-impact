@@ -12,10 +12,19 @@ from app.services.auth_utils import TokenManager, RBACManager
 from app.services.mcp_analytics.ga_service import GAService
 from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
 from app.services.mcp_analytics.peec_service import PeecService
+from app.services.mcp_analytics.secret_manager_service import SecretManagerService
 from app.services.mcp_analytics.data_inspector import DataInspectorService
 from app.services.mcp_analytics.session_service import session_service
 
 logger = logging.getLogger(__name__)
+
+def get_token_manager() -> TokenManager:
+    """Dependency provider for TokenManager / Firestore access."""
+    return TokenManager()
+
+def get_secret_manager_service() -> SecretManagerService:
+    """Dependency provider for GCP Secret Manager service."""
+    return SecretManagerService()
 
 def get_inspector_service():
     return DataInspectorService()

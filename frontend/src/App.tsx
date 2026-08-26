@@ -1,78 +1,21 @@
 // LLYC Intelligence Dashboard App - React Frontend (Branded Multisite)
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './firebase';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ClientLoginScreen } from './components/ClientLoginScreen';
 import { Header, FilterBar } from './components/DashboardLayout';
-import { KpiCard } from './components/KpiCard';
-import { ChartWidget } from './components/ChartWidget';
-import { TopicsCard } from './components/TopicsCard';
-import { DomainsTable } from './components/DomainsTable';
-import { UrlsTable } from './components/UrlsTable';
-import { useAnalytics } from './hooks/useAnalytics';
 import { AdminPanel } from './components/AdminPanel';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth } from './firebase';
-import { Database, X } from 'lucide-react';
+import { MethodologyModal } from './components/methodology/MethodologyModal';
+import { AnalyticsDashboardView } from './components/dashboard/AnalyticsDashboardView';
+import { useAnalytics } from './hooks/useAnalytics';
 import { secureFetch, API_BASE_URL } from './services/apiClient';
+import { getTenantFromUrl, getProxiedLogoUrl, applyTenantTheme } from './services/tenantResolver';
+import { exportDashboardToPdf } from './services/pdfExportService';
+import type { TenantConfig } from './types';
 
-// CI Trigger: Rebuild to inject new Firebase secrets
+export { getTenantFromUrl };
 
-interface TenantConfig {
-  tenant_id: string;
-  tenant_name: string;
-  logo_url: string;
-  primary_color: string;
-  secondary_color: string;
-  font_family: string;
-  support_email: string;
-  ga4_conversion_events?: string[];
-  updated_at?: string;
-  configured_secrets?: {
-    'brandlight-key'?: boolean;
-    'peec-key'?: boolean;
-    'ga4-creds'?: boolean;
-    'adobe-creds'?: boolean;
-  };
-}
-
-export const getTenantFromUrl = (): string | null => {
-  // 1. Detección por query param
-  const urlParams = new URLSearchParams(window.location.search);
-  const tenantParam = urlParams.get('tenant_id') || urlParams.get('tenant');
-  if (tenantParam) {
-    return tenantParam.toLowerCase().trim();
-  }
-
-  // 2. Detección por path name (ej: /media-impact/sanitas o /media-impact/sanitas/)
-  const path = window.location.pathname;
-  if (path.startsWith('/media-impact')) {
-    const relativePath = path.substring('/media-impact'.length);
-    const segments = relativePath.split('/').filter(s => s.length > 0);
-    if (segments.length > 0) {
-      const firstSegment = segments[0].toLowerCase().trim();
-      const reserved = ['admin', 'assets', 'favicon.svg', 'logo_llyc.svg', 'icons.svg', 'index.html'];
-      if (!reserved.includes(firstSegment)) {
-        return firstSegment;
-      }
-    }
-  }
-
-  // 3. Detección por subdominio (producción)
-  const host = window.location.hostname;
-  if (host && host !== 'localhost' && host !== '127.0.0.1' && !host.endsWith('web.app')) {
-    const parts = host.split('.');
-    if (parts.length > 2) {
-      const sub = parts[0].toLowerCase().trim();
-      if (sub !== 'www' && sub !== 'dashboard' && sub !== 'analytics') {
-        return sub;
-      }
-    }
-  }
-
-  return null;
-};
 
 const App: React.FC = () => {
   const { state, data, loading, fetchData, updateState } = useAnalytics();
@@ -81,7 +24,6 @@ const App: React.FC = () => {
   const dashboardRef = useRef<HTMLDivElement>(null);
   const [isAdminView, setIsAdminView] = useState(false);
   const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
-  const [showFormulas, setShowFormulas] = useState(false);
   
   // Estados de autenticación seguros y verificados por Firebase SDK
   const [adminUserEmail, setAdminUserEmail] = useState<string | null>(null);
@@ -258,16 +200,7 @@ const App: React.FC = () => {
       if (res.ok) {
         const data: TenantConfig = await res.json();
         setTenant(data);
-        
-        // Aplicar la paleta de colores de marca dinámicamente en el documento
-        if (data.primary_color) {
-          document.documentElement.style.setProperty('--red', data.primary_color);
-          document.documentElement.style.setProperty('--red-light', data.primary_color + '1A');
-        }
-        if (data.secondary_color) {
-          document.documentElement.style.setProperty('--teal', data.secondary_color);
-          document.documentElement.style.setProperty('--teal-light', data.secondary_color + '1A');
-        }
+        applyTenantTheme(data);
         
         // Activar el modo de vista previa de administrador y LIVE API
         setAdminPreviewTenant(data.tenant_name + " (LIVE API DEMO)");
@@ -445,17 +378,7 @@ const App: React.FC = () => {
           const data: TenantConfig = await res.json();
           setTenant(data);
           updateState({ tenant_id: data.tenant_id });
-          
-          // Aplicar la paleta de colores de marca dinámicamente en el documento
-          if (data.primary_color) {
-            document.documentElement.style.setProperty('--red', data.primary_color);
-            // Generar una versión al 10% de opacidad para el color de fondo claro
-            document.documentElement.style.setProperty('--red-light', data.primary_color + '1A');
-          }
-          if (data.secondary_color) {
-            document.documentElement.style.setProperty('--teal', data.secondary_color);
-            document.documentElement.style.setProperty('--teal-light', data.secondary_color + '1A');
-          }
+          applyTenantTheme(data);
         } else if (tenantParam === 'vidal' || tenantParam === 'vidal-y-vidal') {
           // Fallback para testing local
           const vidalMock: TenantConfig = {
@@ -469,8 +392,7 @@ const App: React.FC = () => {
           };
           setTenant(vidalMock);
           updateState({ tenant_id: vidalMock.tenant_id });
-          document.documentElement.style.setProperty('--red', vidalMock.primary_color);
-          document.documentElement.style.setProperty('--red-light', vidalMock.primary_color + '1A');
+          applyTenantTheme(vidalMock);
         }
       } catch (err) {
         console.error("Error fetching tenant config:", err);
@@ -595,57 +517,12 @@ const App: React.FC = () => {
 
   const handleExportPDF = async () => {
     if (!dashboardRef.current) return;
-    setExporting(true);
-    
-    // Wait for React to render the exporting state (special header) and for images to load
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    try {
-      const el = dashboardRef.current;
-      const cv = await html2canvas(el, {
-        scale: 1.5,
-        useCORS: true,
-        backgroundColor: '#F0F2F4',
-        logging: false
-      });
-      
-      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
-      const iw = pw - 20;
-      const ih = iw / (cv.width / cv.height);
-      
-      const pageH = ph - 20;
-      let rem = ih;
-      let sy = 0;
-      let first = true;
-      
-      while (rem > 0) {
-        if (!first) pdf.addPage();
-        const sh = Math.min(pageH, rem);
-        const ss = (sh / ih) * cv.height;
-        
-        const sc = document.createElement('canvas');
-        sc.width = cv.width;
-        sc.height = Math.round(ss);
-        const ctx = sc.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(cv, 0, Math.round(sy), cv.width, Math.round(ss), 0, 0, cv.width, Math.round(ss));
-          pdf.addImage(sc.toDataURL('image/jpeg', 0.92), 'JPEG', 10, 10, iw, sh);
-        }
-        
-        sy += ss;
-        rem -= sh;
-        first = false;
-      }
-      
-      pdf.save(`LLYC_Dashboard_${state.market}_${new Date().toISOString().split('T')[0]}.pdf`);
-    } catch (e) {
-      console.error("PDF Export error:", e);
-      alert("Error al generar el PDF");
-    } finally {
-      setExporting(false);
-    }
+    await exportDashboardToPdf(dashboardRef.current, {
+      market: state.market,
+      onStart: () => setExporting(true),
+      onEnd: () => setExporting(false),
+      onError: () => alert("Error al generar el PDF")
+    });
   };
 
   if (isAdminView) {
@@ -717,25 +594,7 @@ const App: React.FC = () => {
 
   const trafficSource = state.connection_id?.toLowerCase().includes('adobe') ? 'Adobe' : 'GA4';
 
-  // Valores base (sin maquillaje estático)
-  let aiReferredVal = parseInt((data?.ai_referred || 0).toString(), 10);
-  let aiInferredVal = parseInt((data?.ai_inferred || 0).toString(), 10);
-  let totalSessVal = parseInt((data?.total_sessions || 0).toString(), 10);
-  
-  let engScoreVal = parseFloat((data?.engagement_score || 0).toString());
-  let visScoreVal = parseFloat((data?.visibility_score || 0).toString());
-  let sentScoreVal = parseFloat((data?.sentiment_score || 0).toString());
 
-  // Reverting mathematical overrides
-  if (aiReferredVal + aiInferredVal > totalSessVal) {
-    // If backend provides faulty data where AI > Total, we just render it as is to expose the backend issue
-  }
-
-  const restVal = Math.max(0, totalSessVal - (aiReferredVal + aiInferredVal));
-  
-  const referredPercent = totalSessVal > 0 ? Math.round((aiReferredVal / totalSessVal) * 1000) / 10 : 0;
-  const inferredPercent = totalSessVal > 0 ? Math.round((aiInferredVal / totalSessVal) * 1000) / 10 : 0;
-  const restPercent = totalSessVal > 0 ? Math.round((restVal / totalSessVal) * 1000) / 10 : 0;
 
   // Calcular rendimiento por motor IA dinámicamente
   type EngineData = { sessions: number, conversions: number, count: number, totalDuration: number };
@@ -793,18 +652,8 @@ const App: React.FC = () => {
   };
   
   const motorRows = getMotorRows();
-
-  const mainBrandLabel = tenant?.tenant_name || 'Tu Marca';
-  
   const topicsRows = [...(data?.topics_pr || []), ...(data?.topics_digital || []), ...(data?.topics_rows || [])];
-
   const totalUniqueDomains = data?.rows ? new Set(data.rows.map((r: any) => r.domain).filter(Boolean)).size : 0;
-
-  const getProxiedLogoUrl = (url: string) => {
-    if (!url) return '';
-    if (url.startsWith('/')) return `${import.meta.env.BASE_URL || '/'}${url.substring(1)}`;
-    return `${API_BASE_URL}/api/v1/mcp-analytics/tenant/proxy-logo?url=${encodeURIComponent(url)}`;
-  };
 
   return (
     <div className="min-h-screen flex flex-col bg-dashboard-bg">
@@ -850,451 +699,28 @@ const App: React.FC = () => {
         onAccountChange={(accId) => handleAccountChange(state.connection_id, accId)}
       />
 
-      <main ref={dashboardRef} className="flex-1 p-8 space-y-6 max-w-[1400px] mx-auto w-full">
-        {exporting && (
-          <div className="bg-white -mx-8 -mt-8 mb-6 px-8 py-5 border-b border-dashboard-border flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-6">
-              {tenant?.logo_url ? (
-                <img src={getProxiedLogoUrl(tenant.logo_url)} crossOrigin="anonymous" alt={tenant.tenant_name} className="h-10 object-contain max-w-[150px]" />
-              ) : (
-                <div className="text-red font-black text-xl tracking-tighter">{tenant?.tenant_name || 'LLYC'}</div>
-              )}
-              <div className="h-6 w-[1px] bg-dashboard-border"></div>
-              <div className="text-[11px] font-black uppercase tracking-widest text-navy">
-                Intelligence Dashboard <span className="text-mid font-medium">2026</span>
-              </div>
-              <div className="h-6 w-[1px] bg-dashboard-border"></div>
-              <img src={`${import.meta.env.BASE_URL || '/'}llyc_logo_pdf.png`} alt="LLYC" crossOrigin="anonymous" className="h-7 object-contain" />
-            </div>
-            <div className="text-[11px] font-bold text-navy uppercase tracking-widest bg-dashboard-bg px-3 py-1.5 rounded-lg border border-dashboard-border">
-              Fechas analizadas: <span className="text-red">{state.from || '--'}</span> <span className="text-mid font-normal">a</span> <span className="text-red">{state.to || '--'}</span>
-            </div>
-          </div>
-        )}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-          <KpiCard 
-            label="Sesiones totales" 
-            tooltip="Volumen total de tráfico recibido en el sitio web (incluyendo canales como orgánico, directo, pagado, referido, etc.)." 
-            value={totalSessVal.toLocaleString('es-ES')} 
-            suffix="" 
-            trend={""} 
-            source={trafficSource} 
-          />
-          <KpiCard 
-            label="IA referida" 
-            tooltip="Sesiones directas declaradas por motores de IA." 
-            longTooltip={
-              <>
-                <p>
-                  Las sesiones de <strong className="text-navy">IA Referida</strong> representan a los usuarios que han hecho clic en un enlace de tu marca directamente desde la interfaz de un motor de IA generativa y el motor declara explícitamente su origen en la cabecera HTTP (ej. <code className="bg-gray-100 px-1 rounded">chatgpt.com / referral</code>).
-                </p>
-                <p>
-                  Es común que este número sea significativamente inferior a la IA Inferida, ya que la gran mayoría de interacciones con IA, especialmente en aplicaciones móviles (como la app de ChatGPT, Apple Intelligence, etc.) u otras plataformas, ocultan su origen inyectando el tráfico como "Directo".
-                </p>
-              </>
-            }
-            value={aiReferredVal.toLocaleString('es-ES')} 
-            suffix="" 
-            trend={""} 
-            source={trafficSource} 
-          />
-          <KpiCard 
-            label={
-              <div className="flex items-center gap-1.5">
-                IA inferida
-                {data?.inferred_traffic?.confidence_index && !data.inferred_traffic.confidence_index.is_significant && (
-                  <div 
-                    className="text-amber-500 cursor-help flex items-center" 
-                    title="Muestra estadística insuficiente. El margen de error puede ser mayor al habitual."
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                  </div>
-                )}
-              </div>
-            } 
-            tooltip="Tráfico orgánico/directo perfilado como proviniendo de IA." 
-            longTooltip={
-              <>
-                <p>
-                  Las sesiones de <strong className="text-navy">IA Inferida</strong> representan tráfico que, aunque ingresa a tu web camuflado como "Directo" o sin referente claro, ha sido clasificado por el algoritmo algorítmico de LLYC como altamente probable de provenir de consultas de IA.
-                </p>
-                <p>
-                  Nuestro modelo de propensión analiza factores de comportamiento en tiempo real, como la velocidad de rebote, la profundidad de scroll, el tiempo en página y la URL de aterrizaje para reconstruir el "viaje del usuario" y detectar interacciones típicas de cuando un usuario copia, pega o hace tap en un enlace sugerido por un chat de Inteligencia Artificial que no envía cabeceras de referer.
-                </p>
-                <p>
-                  En el entorno SEO actual dominado por respuestas Zero-Click y apps nativas, <strong className="text-teal">es la norma y lo esperado</strong> que el tráfico inferido supere holgadamente al tráfico explícitamente referido.
-                </p>
-              </>
-            }
-            value={aiInferredVal.toLocaleString('es-ES')} 
-            suffix="" 
-            trend={""} 
-            source={trafficSource} 
-          />
-          <KpiCard label="Engagement IA" tooltip="Calificación de 0 a 100 que evalúa la calidad y profundidad del comportamiento en la web del tráfico proveniente de la IA (considera conversiones, tiempo en página y páginas por sesión)." value={engScoreVal} suffix={data?.engagement_score !== undefined ? "/100" : ""} trend={""} source={trafficSource} />
-          <KpiCard label="Visibilidad unbranded" tooltip="Share of Voice estimado de la marca dentro de los motores de IA cuando los usuarios realizan consultas genéricas del sector sin mencionar la marca explícitamente." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? visScoreVal : "N/A"} suffix={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 && data?.visibility_score !== undefined ? "%" : ""} trend={""} source={aiSource} colorClass="!bg-teal-light/20 border-teal/20" />
-          <KpiCard label="Score sentimiento" tooltip="Puntuación promedio de 0 a 10 que evalúa qué tan positivas, neutrales o negativas son las menciones de la marca dentro de las respuestas de IA." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? sentScoreVal : "N/A"} suffix={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 && data?.sentiment_score !== undefined ? "/10" : ""} trend={""} source={aiSource} />
-          <KpiCard label="Modelos analizados" tooltip="Cantidad total de modelos y motores conversacionales de IA que el sistema está monitorizando." value={data ? motorRows.length.toString() : "--"} trend={""} source={aiSource} />
-          <KpiCard label="Dominios monitorizados" tooltip="Volumen de fuentes de información y dominios web (medios, foros, wikis) que están siendo indexados y usados por los motores de IA para generar sus respuestas." value={data && (data?.total_monitored_domains || totalUniqueDomains) > 0 ? (data?.total_monitored_domains ? data.total_monitored_domains.toLocaleString('es-ES') : totalUniqueDomains.toLocaleString('es-ES')) : "N/A"} trend={""} source={aiSource} />
-        </div>
 
-        {!data && !loading ? (
-          <div className="p-12 text-center border border-dashed border-white/10 rounded-2xl bg-white/5 text-mid text-sm flex flex-col items-center gap-3">
-            <Database className="w-8 h-8 text-amber-500 animate-bounce" />
-            <h3 className="font-black text-xs uppercase tracking-widest text-white">No se detectaron datos en Google BigQuery para este inquilino</h3>
-            <p className="max-w-md text-[10px] leading-relaxed text-mid">
-              Para ver el dashboard analítico real de tu cliente, ingresa al Panel de Administración maestro y haz clic en "Re-desplegar ETL" para iniciar la ingesta real de los últimos 90 días de datos en BigQuery.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <ChartWidget 
-              type="line" 
-              title="Evolución tráfico IA" 
-              source={trafficSource} 
-              data={lineData}
-              options={{
-                scales: {
-                  y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    grid: { color: 'rgba(0,0,0,0.05)' },
-                    title: {
-                      display: true,
-                      text: 'Sesiones Totales',
-                      color: '#0A263B',
-                      font: { size: 10, weight: 'bold' }
-                    }
-                  },
-                  y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    grid: { drawOnChartArea: false },
-                    title: {
-                      display: true,
-                      text: 'Sesiones IA',
-                      color: '#F54963',
-                      font: { size: 10, weight: 'bold' }
-                    }
-                  }
-                }
-              }}
-              height={200}
-              footer={
-                <div className="flex gap-4 text-[10px] font-bold uppercase tracking-widest text-mid">
-                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-1 border-t-2 border-dashed border-mid/50"></div> Sesiones totales</div>
-                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-red"></div> Sesiones IA</div>
-                </div>
-              }
-            />
-          </div>
-          <div>
-            <ChartWidget 
-              type="doughnut" 
-              title="Composición de audiencia" 
-              source={trafficSource} 
-              data={{
-                labels: ['IA directa', 'IA inferida', 'Resto'],
-                datasets: [{
-                  data: [aiReferredVal, aiInferredVal, restVal],
-                  backgroundColor: ['#F54963', '#36A7B7', '#0A263B'],
-                  borderWidth: 0
-                }]
-              }}
-              height={200}
-              footer={
-                <div className="flex flex-wrap gap-x-4 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-mid">
-                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-red"></div> IA directa {referredPercent}%</div>
-                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-navy"></div> IA inferida {inferredPercent}%</div>
-                  <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-mid/30"></div> Resto {restPercent}%</div>
-                </div>
-              }
-            />
-          </div>
-        </div>
+      <AnalyticsDashboardView
+        data={data}
+        loading={loading}
+        state={state}
+        tenant={tenant}
+        trafficSource={trafficSource}
+        aiSource={aiSource}
+        lineData={lineData}
+        top10Domains={top10Domains}
+        motorRows={motorRows}
+        topicsRows={topicsRows}
+        totalUniqueDomains={totalUniqueDomains}
+        exporting={exporting}
+        dashboardRef={dashboardRef}
+        onOpenMethodology={() => setIsMethodologyOpen(true)}
+      />
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-xl overflow-hidden border border-dashboard-border shadow-sm">
-             <div className="p-5 pb-0">
-                <div className="text-[11px] font-bold text-navy uppercase tracking-widest mb-1 flex items-center gap-1">
-                  Rendimiento por motor IA <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${trafficSource === 'Adobe' ? 'bg-navy/10 text-navy' : 'bg-teal-light text-teal'}`}>{trafficSource}</span>
-                </div>
-                <div className="text-[10px] text-mid mb-4">Desglose de conversiones configuradas</div>
-             </div>
-             <div className="overflow-x-auto">
-               <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead className="bg-dashboard-bg/50">
-                    <tr className="text-[10px] font-bold text-mid uppercase tracking-widest">
-                      <th className="px-5 py-2">Motor</th>
-                      <th className="px-5 py-2 text-right">Sesiones</th>
-                      <th className="px-5 py-2 text-right">Duración</th>
-                      {/* Columnas dinámicas de conversión */}
-                      {tenant?.ga4_conversion_events && tenant.ga4_conversion_events.length > 0 ? (
-                        tenant.ga4_conversion_events.map(event => (
-                          <th key={event} className="px-5 py-2 text-right">{event.replace(/_/g, ' ')}</th>
-                        ))
-                      ) : (
-                        <th className="px-5 py-2 text-right">Conv.</th>
-                      )}
-                      <th className="px-5 py-2 text-center">Score</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-dashboard-border text-xs">
-                    {motorRows.length > 0 ? motorRows.map((r: any, i: number) => (
-                      <tr key={i} className="hover:bg-dashboard-bg/20 transition-colors">
-                        <td className="px-5 py-2 font-bold text-navy">{r.n}</td>
-                        <td className="px-5 py-2 text-right text-mid">{r.s}</td>
-                        <td className="px-5 py-2 text-right text-mid">{r.d}</td>
-                        
-                        {/* Valores dinámicos de conversión */}
-                        {tenant?.ga4_conversion_events && tenant.ga4_conversion_events.length > 0 ? (
-                          tenant.ga4_conversion_events.map(event => (
-                            <td key={event} className="px-5 py-2 text-right text-mid font-medium text-navy">
-                              {r.conversionsByEvent?.[event] || 0}
-                            </td>
-                          ))
-                        ) : (
-                          <td className="px-5 py-2 text-right text-mid">{r.c}</td>
-                        )}
-
-                        <td className="px-5 py-2">
-                          <div className="flex items-center gap-2 justify-end">
-                            <span className="text-[10px] font-bold text-mid">{r.sc}</span>
-                            <div className="w-16 h-1 bg-dashboard-bg rounded-full overflow-hidden">
-                              <div className="h-full bg-red" style={{width:`${r.sc}%`}}></div>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )) : (
-                      <tr><td colSpan={6} className="px-5 py-8 text-center text-mid text-xs italic">Sin datos de tráfico para este periodo</td></tr>
-                    )}
-                  </tbody>
-               </table>
-             </div>
-          </div>
-          <ChartWidget 
-            type="bar" 
-            title="Visibilidad de marca por motor IA" 
-            source={aiSource} 
-            data={{
-              labels: data?.visibility_by_engine?.length ? data.visibility_by_engine.map((e: any) => e.engine) : ['Sin datos'],
-              datasets: [
-                { label: mainBrandLabel, data: data?.visibility_by_engine?.length ? data.visibility_by_engine.map((e: any) => e.brand_score) : [0], backgroundColor: '#36A7B7', borderRadius: 4 },
-                { label: 'Prom.', data: data?.visibility_by_engine?.length ? data.visibility_by_engine.map((e: any) => e.competitor_avg) : [0], backgroundColor: '#C5D2DA', borderRadius: 4 }
-              ]
-            }}
-            height={200}
-            footer={
-              <div className="flex gap-4 text-[10px] font-bold uppercase tracking-widest text-mid">
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-teal"></div> {mainBrandLabel}</div>
-                <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-sm bg-mid/30"></div> Prom. competidores</div>
-              </div>
-            }
-          />
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {(() => {
-            const rawClusters = data?.behavior_clusters?.length ? data.behavior_clusters : [
-              { label: 'Transaccional', value: 0 },
-              { label: 'Investigación', value: 0 },
-              { label: 'Respuesta Rápida', value: 0 },
-              { label: 'Casual', value: 0 }
-            ];
-            
-            const order = ['Transaccional', 'Investigación', 'Respuesta Rápida', 'Casual'];
-            const sortedClusters = [...rawClusters].sort((a, b) => order.indexOf(a.label) - order.indexOf(b.label));
-            
-            const clusterColorMap: Record<string, string> = {
-              'Transaccional': '#F54963',
-              'Investigación': '#36A7B7',
-              'Respuesta Rápida': '#0A263B',
-              'Casual': '#E8A020'
-            };
-            
-            const hoverTextMap: Record<string, string> = {
-              'Transaccional': 'Alta intención comercial o de conversión.',
-              'Investigación': 'Fase exploratoria o evaluación detallada.',
-              'Respuesta Rápida': 'Búsqueda de datos puntuales o confirmaciones.',
-              'Casual': 'Interacción periférica sin intención de negocio.'
-            };
-            
-            return (
-              <ChartWidget 
-                type="bar" 
-                title="Clusters de comportamiento IA" 
-                source={trafficSource} 
-                onInfoClick={() => setIsMethodologyOpen(true)}
-                data={{
-                  labels: sortedClusters.map((c: any) => c.label),
-                  datasets: [{ 
-                    label: 'Sesiones IA',
-                    data: sortedClusters.map((c: any) => c.value), 
-                    backgroundColor: sortedClusters.map((c: any) => clusterColorMap[c.label] || '#999999'), 
-                    borderRadius: 4 
-                  }]
-                }}
-                options={{
-                  plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                      callbacks: {
-                        afterLabel: function(context: any) {
-                          return hoverTextMap[context.label] || '';
-                        }
-                      }
-                    }
-                  }
-                }}
-              />
-            );
-          })()}
-          
-          <ChartWidget 
-            type="bar" 
-            title="Visibilidad unbranded — top 5" 
-            source={aiSource} 
-            options={{ indexAxis: 'y', plugins: { legend: { display: false } } }}
-            data={{
-              labels: data?.competitors?.filter((c: any) => c.classification?.toLowerCase() !== 'owned').slice(0, 5).map((c: any) => c.domain || c.name) || ['Sin datos'],
-              datasets: [{ data: data?.competitors?.filter((c: any) => c.classification?.toLowerCase() !== 'owned').slice(0, 5).map((c: any) => c.visibility_score) || [0], backgroundColor: ['#F54963', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
-            }}
-          />
-          <ChartWidget 
-            type="bar" 
-            title="Sentimiento de marca — top 5" 
-            source={aiSource} 
-            options={{ indexAxis: 'y', scales: { x: { min: 5, max: 10 } }, plugins: { legend: { display: false } } }}
-            data={{
-              labels: data?.competitors?.slice(0, 5).map((c: any) => c.domain || c.name) || ['Sin datos'],
-              datasets: [{ data: data?.competitors?.slice(0, 5).map((c: any) => c.sentiment_score) || [0], backgroundColor: ['#36A7B7', '#0A263B', '#0A263B', '#0A263B', '#0A263B'], borderRadius: 4 }]
-            }}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-6">
-          <TopicsCard 
-            title="Temáticas clave — Impacto en IA" 
-            source={aiSource}
-            topics={topicsRows.sort((a,b) => (b.w||0) - (a.w||0)).slice(0, 10)}
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-6">
-          <DomainsTable title="Top 10 dominios de visibilidad" source={aiSource} rows={top10Domains} />
-        </div>
-
-        {data?.content_affinity && data.content_affinity.length > 0 && (
-          <div className="grid grid-cols-1 gap-6">
-            <UrlsTable title="URLs de Aterrizaje Recomendadas por IA" source={trafficSource} rows={data.content_affinity} />
-          </div>
-        )}
-          </>
-        )}
-      </main>
-
-      {isMethodologyOpen && (
-        <div className="fixed inset-0 bg-navy/80 flex items-center justify-center p-5 z-[2000] backdrop-blur-sm transition-all duration-300">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="flex justify-between items-center p-6 border-b border-dashboard-border bg-dashboard-bg/50">
-              <h3 className="text-lg font-bold text-navy uppercase tracking-widest flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-teal"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                Metodología de Clusters
-              </h3>
-              <button 
-                onClick={() => setIsMethodologyOpen(false)}
-                className="text-mid hover:text-red transition-colors p-1 rounded-full hover:bg-red-light"
-              >
-                <X size={20} strokeWidth={2.5} />
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto custom-scrollbar">
-              <div className="space-y-6 text-sm text-navy/80 leading-relaxed">
-                <p>
-                  Los <strong className="text-navy">Clusters de Comportamiento IA</strong> clasifican el tráfico inferido basándose en modelos de intención del usuario cuando interactúa con respuestas generadas por Inteligencia Artificial.
-                </p>
-                
-                <div className="space-y-4">
-                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
-                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#F54963'}}></span>
-                      Transaccional
-                    </h4>
-                    <p>Usuarios con alta intención de compra o conversión inmediata. Provienen de prompts que buscan productos específicos, comparativas de precios o enlaces directos de contratación.</p>
-                  </div>
-                  
-                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
-                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#36A7B7'}}></span>
-                      Investigación
-                    </h4>
-                    <p>Usuarios en fase exploratoria o de "mid-funnel". Sus interacciones con la IA suelen ser preguntas de profundidad, tutoriales, o evaluaciones detalladas de servicios antes de tomar una decisión.</p>
-                  </div>
-                  
-                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
-                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#0A263B'}}></span>
-                      Respuesta Rápida
-                    </h4>
-                    <p>Usuarios que buscan un dato puntual (FAQs, números de contacto, horarios). El clic suele ser para verificar o ampliar ligeramente la información mostrada por la IA (Zero-Click searches).</p>
-                  </div>
-                  
-                  <div className="bg-dashboard-bg p-4 rounded-xl border border-dashboard-border/50">
-                    <h4 className="font-bold text-navy mb-2 flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full" style={{backgroundColor: '#E8A020'}}></span>
-                      Casual
-                    </h4>
-                    <p>Tráfico menos dirigido, derivado de conversaciones periféricas o menciones de marca sin una intención clara de negocio. Tienen el engagement rate más bajo.</p>
-                  </div>
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-dashboard-border">
-                  <div className="flex justify-between items-center mb-4">
-                    <p className="text-xs text-mid">La distribución se calcula utilizando un modelo de propensión basado en las dimensiones semánticas de la consulta de IA inicial y el comportamiento post-clic.</p>
-                    <button 
-                      onClick={() => setShowFormulas(!showFormulas)}
-                      className="text-xs font-bold text-teal hover:text-navy transition-colors px-3 py-1.5 border border-teal/20 rounded-md hover:bg-teal/5 flex-shrink-0 ml-4"
-                    >
-                      {showFormulas ? 'Ocultar Fórmulas' : 'Ver Fórmulas'}
-                    </button>
-                  </div>
-                  
-                  {showFormulas && (
-                    <div className="bg-navy rounded-xl p-5 text-white/90 text-xs font-mono space-y-4 shadow-inner mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div>
-                        <div className="text-teal-light mb-1 font-bold">1. Transaccional (Weight: 1.5)</div>
-                        <div>Score = (conversion_rate * 40) + (bounce_rate_inverse * 20) + (time_on_site_score * 20) + semantic_intent(buy, hire, price)</div>
-                      </div>
-                      <div>
-                        <div className="text-teal-light mb-1 font-bold">2. Investigación (Weight: 1.2)</div>
-                        <div>Score = (pages_per_session * 30) + (time_on_site_score * 30) + semantic_intent(how, what, compare, review)</div>
-                      </div>
-                      <div>
-                        <div className="text-teal-light mb-1 font-bold">3. Respuesta Rápida (Weight: 1.0)</div>
-                        <div>Score = (bounce_rate * 50) + (short_time_on_site * 30) + semantic_intent(contact, address, hours, faq)</div>
-                      </div>
-                      <div>
-                        <div className="text-teal-light mb-1 font-bold">4. Casual (Weight: 0.8)</div>
-                        <div>Score = Default fallback para tráfico de baja retención sin keywords transaccionales o de investigación explícitas.</div>
-                      </div>
-                      <div className="pt-2 border-t border-white/10 text-[10px] text-white/50">
-                        * semantic_intent() se resuelve vía Natural Language Processing en BigQuery, cruzando la Query original reportada por la IA con nuestro corpus de intenciones.
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
+      <MethodologyModal
+        isOpen={isMethodologyOpen}
+        onClose={() => setIsMethodologyOpen(false)}
+      />
 
       {exporting && (
         <div className="fixed inset-0 bg-navy/80 flex items-center justify-center p-5 z-[2000]">

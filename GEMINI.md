@@ -197,3 +197,13 @@ Para realizar esta integración de manera segura y alineada con los estándares 
 *   Realizar el commit en el repo core siguiendo las reglas de **Conventional Commits** y manteniendo la privacidad (sin nombrar clientes reales).
 *   Solicitar autorización al usuario para hacer el `git push` de la rama remota en el repo core.
 *   Una vez subida la rama, abrir un **Pull Request (PR)** en GitHub apuntando a `main` y solicitar la revisión formal del equipo.
+
+---
+
+## 🛑 9. Integridad de los Datos (Política de Cero Mocks)
+
+**REGLA INQUEBRANTABLE:** Todo agente de IA o colaborador tiene estrictamente prohibido generar, inyectar o hardcodear datos falsos ("mocks") con el objetivo de aparentar funcionalidad o llenar visualmente el dashboard. 
+
+*   **Fuentes Únicas de Verdad:** Toda métrica mostrada en el frontend debe provenir de cálculos reales ejecutados en el backend a partir de los datos almacenados en Google BigQuery o extraídos en vivo de las APIs oficiales (GA4, Adobe, Peec.ai, Brandlight).
+*   **Ausencia de Datos:** Si un inquilino no tiene configurado un servicio (ej. no tiene Brandlight) o no hay datos históricos en la base de datos para una métrica específica, la aplicación debe manejar esta ausencia de forma elegante (ej. ocultando las gráficas con renderizado condicional o mostrando un estado vacío/N/A). 
+*   **Cero Excepciones:** Jamás se creará un script o lógica para inyectar datos simulados en la base de datos o en la respuesta de la API para "hacer que se vea bonito". La fidelidad y exactitud de los datos es la prioridad máxima de esta plataforma de inteligencia.
