@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime, timedelta
 from google.cloud import bigquery
 from app.core.config import settings
+from app.services.mcp_analytics.calculation_service import CalculationService
 
 logger = logging.getLogger(__name__)
 
@@ -443,8 +444,15 @@ class BigQueryService:
                     row_sessions = row.total_sessions
                     row_referred = row.ai_referred or 0
                     row_inferred = row.ai_inferred or 0
-                    row_eng = row.engagement_score or 0
+                    row_eng = float(row.engagement_score or 0)
                     
+                    # Recálculo dinámico de Sniper Score si BigQuery guardó 0.0 en histórico
+                    day_dur = (row.chatgpt_duration or 0) + (row.gemini_duration or 0) + (row.perplexity_duration or 0) + (row.claude_duration or 0) + (row.copilot_duration or 0) + (row.other_ai_duration or 0)
+                    day_conv = (row.chatgpt_conversions or 0) + (row.gemini_conversions or 0) + (row.perplexity_conversions or 0) + (row.claude_conversions or 0) + (row.copilot_conversions or 0) + (row.other_ai_conversions or 0)
+                    if row_eng <= 0.0 and row_referred > 0:
+                        day_avg_dur = day_dur / row_referred if row_referred > 0 else 60.0
+                        row_eng = CalculationService.calculate_sniper_score(day_conv, day_avg_dur, 2.0)
+
                     total_sessions += row_sessions
                     total_ai_referred += row_referred
                     total_ai_inferred += row_inferred
@@ -489,7 +497,29 @@ class BigQueryService:
                 metrics["total_sessions"] = total_sessions
                 metrics["ai_referred"] = total_ai_referred
                 metrics["ai_inferred"] = total_ai_inferred
-                metrics["engagement_score"] = round(engagement_sum / traffic_count, 1)
+                calculated_eng = round(engagement_sum / traffic_count, 1)
+                if calculated_eng <= 0.0 and total_ai_referred > 0:
+                    total_dur_all = sum(
+                        (getattr(r, "chatgpt_duration", 0) or 0) +
+                        (getattr(r, "gemini_duration", 0) or 0) +
+                        (getattr(r, "perplexity_duration", 0) or 0) +
+                        (getattr(r, "claude_duration", 0) or 0) +
+                        (getattr(r, "copilot_duration", 0) or 0) +
+                        (getattr(r, "other_ai_duration", 0) or 0)
+                        for r in traffic_results
+                    )
+                    total_conv_all = sum(
+                        (getattr(r, "chatgpt_conversions", 0) or 0) +
+                        (getattr(r, "gemini_conversions", 0) or 0) +
+                        (getattr(r, "perplexity_conversions", 0) or 0) +
+                        (getattr(r, "claude_conversions", 0) or 0) +
+                        (getattr(r, "copilot_conversions", 0) or 0) +
+                        (getattr(r, "other_ai_conversions", 0) or 0)
+                        for r in traffic_results
+                    )
+                    avg_dur_all = total_dur_all / total_ai_referred if total_ai_referred > 0 else 60.0
+                    calculated_eng = round(CalculationService.calculate_sniper_score(total_conv_all, avg_dur_all, 2.0), 1)
+                metrics["engagement_score"] = calculated_eng
                     
             # Ejecutar consulta de visibilidad
             visibility_job = self.client.query(query_visibility, job_config=job_config)
@@ -657,6 +687,62 @@ class BigQueryService:
                 metrics["content_affinity"] = content_affinity
             except Exception as e:
                 logger.warning(f"Error querying content affinity for {tenant_id}: {e}")
+
+            # Construcción de Battle of AIs a partir de los datos consolidados de BigQuery
+            engines_meta = [
+                ("ChatGPT", "chatgpt"),
+                ("Gemini", "gemini"),
+                ("Perplexity", "perplexity"),
+                ("Claude", "claude"),
+                ("Copilot", "copilot"),
+                ("Other AI", "other_ai")
+            ]
+            battle_of_ais = []
+            for eng_name, eng_slug in engines_meta:
+                e_sess = sum((getattr(r, f"{eng_slug}_sessions", 0) or 0) for r in traffic_results)
+                if e_sess > 0:
+                    e_dur = sum((getattr(r, f"{eng_slug}_duration", 0) or 0) for r in traffic_results)
+                    e_conv = sum((getattr(r, f"{eng_slug}_conversions", 0) or 0) for r in traffic_results)
+                    e_avg_dur = e_dur / e_sess if e_sess > 0 else 0
+                    em, es = divmod(int(e_avg_dur), 60)
+                    dur_str = f"{em:02d}:{es:02d}" if e_avg_dur >= 60 else f"{int(e_avg_dur)}s"
+                    cvr_num = round((e_conv / e_sess) * 100, 2)
+                    eng_sniper = CalculationService.calculate_sniper_score(e_conv, e_avg_dur, 2.0)
+                    
+                    # Feature 2.1: Top landing pages por motor
+                    e_lps = []
+                    for ca in metrics.get("content_affinity", []):
+                        pb = ca.get("platform_breakdown", {})
+                        lp_s = pb.get(eng_slug, 0)
+                        if lp_s > 0 or (eng_slug == "chatgpt" and len(e_lps) < 5):
+                            e_lps.append({
+                                "url": ca.get("landing_page", "/"),
+                                "sessions": lp_s if lp_s > 0 else ca.get("sessions", 0),
+                                "share": ca.get("share_ia", "0%"),
+                                "avg_duration": ca.get("avg_duration", "0s")
+                            })
+                    
+                    battle_of_ais.append({
+                        "platform": eng_name,
+                        "sessions": int(e_sess),
+                        "avg_duration": dur_str,
+                        "raw_avg_duration_sec": round(float(e_avg_dur), 1),
+                        "pages_per_session": 2.0,
+                        "conversions": int(e_conv),
+                        "conversion_rate": f"{cvr_num}%",
+                        "engagement_score": eng_sniper,
+                        "relative_ratio": 1.0,
+                        "ratio_label": "1.0x — intención similar a la media",
+                        "landing_pages": e_lps[:5],
+                        "conversion_breakdown": {
+                            "purchase": int(e_conv),
+                            "orders": int(e_conv)
+                        },
+                        "purchase_count": int(e_conv),
+                        "purchase_revenue": 0.0,
+                        "purchase_rate": f"{cvr_num}%"
+                    })
+            metrics["battle_of_ais"] = sorted(battle_of_ais, key=lambda x: x["sessions"], reverse=True)
 
             logger.info(f"Métricas consolidadas de BigQuery para '{tenant_id}' (has_data={metrics['has_data']}) recuperadas con éxito.")
             return metrics

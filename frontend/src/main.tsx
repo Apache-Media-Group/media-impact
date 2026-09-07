@@ -1,5 +1,4 @@
 // frontend/src/main.tsx - LLYC Intelligence Dashboard React Frontend
-import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ErrorBoundary } from 'react-error-boundary'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -32,13 +31,18 @@ function ErrorFallback({error}: {error: any}) {
   )
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <ErrorBoundary FallbackComponent={ErrorFallback}>
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </ErrorBoundary>
-  </StrictMode>,
-)
+const rootElement = document.getElementById('root')!;
+let root = (rootElement as any)._reactRoot;
+if (!root) {
+  root = createRoot(rootElement);
+  (rootElement as any)._reactRoot = root;
+}
+
+root.render(
+  <ErrorBoundary FallbackComponent={ErrorFallback}>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </ErrorBoundary>,
+);
 

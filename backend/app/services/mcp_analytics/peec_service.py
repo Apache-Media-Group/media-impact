@@ -13,6 +13,8 @@ from app.models.mcp_analytics.core_models import GAAccount, GAProperty, RunRepor
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=40.0, connect=10.0)
+
 class PeecService(AnalyticsService):
     """
     Service to connect to the Peec.ai API and fetch data.
@@ -76,7 +78,7 @@ class PeecService(AnalyticsService):
                 "x-api-key": self.api_key,
                 "Content-Type": "application/json"
             }
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 async with session.get(f"{self.base_url}/projects", headers=headers) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -155,7 +157,7 @@ class PeecService(AnalyticsService):
                 "x-api-key": self.api_key,
                 "Content-Type": "application/json"
             }
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 # 1. Obtenemos el nombre del proyecto para filtrar su marca
                 project_name = "Vidal & Vidal"
                 async with session.get(f"{self.base_url}/projects", headers=headers) as p_resp:
@@ -251,7 +253,7 @@ class PeecService(AnalyticsService):
                 actual_id = self.project_id
                 
             headers = {"x-api-key": self.api_key, "Content-Type": "application/json"}
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 payload = {"project_id": actual_id, "limit": limit}
                 if start_date:
                     payload["start_date"] = start_date
@@ -294,7 +296,7 @@ class PeecService(AnalyticsService):
                 actual_id = self.project_id
                 
             headers = {"x-api-key": self.api_key, "Content-Type": "application/json"}
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 payload = {"project_id": actual_id, "limit": limit}
                 if start_date:
                     payload["start_date"] = start_date

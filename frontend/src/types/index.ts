@@ -50,12 +50,20 @@ export interface ApiResponse {
   topics_digital?: any[];
   topics_rows?: any[];
   content_affinity?: any[];
+  battle_of_ais?: any[];
   inferred_traffic?: {
     confidence_index?: {
       is_significant: boolean;
     };
   };
   [key: string]: any;
+}
+
+export interface MotorLandingPage {
+  url: string;
+  sessions: number;
+  share?: string;
+  avg_duration?: string;
 }
 
 export interface MotorPerformanceRow {
@@ -65,6 +73,11 @@ export interface MotorPerformanceRow {
   d: string;
   c: string;
   sc: number;
+  conversions?: number;
   conversionsByEvent?: Record<string, number>;
+  landingPages?: MotorLandingPage[];
+  purchaseCount?: number;
+  purchaseRevenue?: number;
+  purchaseRate?: string;
 }
 

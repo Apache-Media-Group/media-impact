@@ -16,6 +16,10 @@ Durante la auditoría técnica de ingeniería de datos (`/data-engineer`), se id
 3. **Bloqueo Síncrono y Timeouts HTTP (HTTP Deadline):**
    - Las ejecuciones de ETL se ejecutaban de forma síncrona en el hilo principal de la petición HTTP, excediendo el deadline por defecto de Cloud Scheduler (3 minutos) en sincronizaciones extensas.
 
+4. **Estados Huérfanos por Interrupción o Timeouts en APIs Externas:**
+   - Si una llamada a una API externa (ej. Brandlight BI) sufría demoras prolongadas con 25 reintentos sin timeout de sesión o el contenedor de Cloud Run se reiniciaba, el documento `tenants/{tenant_id}` quedaba congelado permanentemente en Firestore con `status: "deploying"`.
+   - En el frontend, el botón "Re-desplegar" quedaba inhabilitado sin opción de cancelar o reiniciar.
+
 ---
 
 ## 2. Solución e Implementación Técnica
@@ -33,6 +37,11 @@ En [`admin_etl.py`](backend/app/services/mcp_analytics/routes/admin_etl.py):
 ### C. Normalización Dinámica del Job de Cloud Scheduler
 - Construcción dinámica de la URI usando `API_BASE_URL` o `CLOUD_RUN_SERVICE_URL` con fallback canónico a `https://dashboard.llyc.global/api/v1/mcp-analytics/admin/etl/trigger`.
 - Configuración de `attempt_deadline` extendido (540s / 9 minutos) y cabeceras `X-CloudScheduler` y `X-Cron-Secret`.
+
+### D. Resiliencia de APIs Externas y Cancelación Manual / Auto-cleanup
+- **Brandlight Service Hardening:** Configuración de `ClientTimeout` estricto (40s), reducción de reintentos máximos a 3 y reducción de pausas de respiro de 30s a 5s para evitar bloqueos del hilo.
+- **Auto-limpieza de Estados Huérfanos:** En `list_tenants_admin`, cualquier estado `deploying` con más de 15 minutos de antigüedad se marca automáticamente como expirado/interrumpido.
+- **Endpoint y Botón de Cancelación / Reset:** Agregado endpoint `/admin/tenants/{tenant_id}/reset-status` y botón "⏹️ Cancelar" en el frontend para forzar el desbloqueo inmediato.
 
 ---
 

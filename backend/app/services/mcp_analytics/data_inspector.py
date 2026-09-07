@@ -68,8 +68,8 @@ class DataInspectorService:
                 samples = int(sampling_metadatas[0].get("samplesReadCount", 0))
                 total = int(sampling_metadatas[0].get("samplingSpaceSize", 1))
                 metrics["sampling_percentage"] = round((samples / total) * 100, 2)
-            except:
-                pass
+            except Exception as e:
+                logger.debug(f"Sampling percentage calculation fallback: {e}")
 
         # Check thresholding
         metrics["is_subject_to_thresholding"] = meta.get("subjectToThresholding", False)

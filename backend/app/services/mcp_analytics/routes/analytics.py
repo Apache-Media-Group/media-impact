@@ -251,6 +251,7 @@ async def run_report(
                         "other_ai_sessions": str(r.get("other_ai_sessions", 0)),
                         "other_ai_duration": str(r.get("other_ai_duration", 0.0)),
                         "other_ai_conversions": str(r.get("other_ai_conversions", 0.0)),
+                        "engagement_score": str(r.get("engagement_score", 0)),
                         "conversions": str(r.get("engagement_score", 0)),
                         "visibility_score": str(metrics.get("visibility_score", 0)),
                         "sentiment_score": str(metrics.get("sentiment_score", 0))
@@ -281,6 +282,7 @@ async def run_report(
                         "other_ai_sessions": "0",
                         "other_ai_duration": "0",
                         "other_ai_conversions": "0",
+                        "engagement_score": str(metrics.get("engagement_score", 0)),
                         "conversions": "0",
                         "visibility_score": str(metrics.get("visibility_score", 0)),
                         "sentiment_score": str(metrics.get("sentiment_score", 0))
@@ -300,7 +302,9 @@ async def run_report(
                         "domains": metrics.get("domains", []),
                         "behavioral_clusters": metrics.get("behavioral_clusters", {}),
                         "visibility_by_engine": metrics.get("visibility_by_engine", []),
-                        "content_affinity": metrics.get("content_affinity", [])
+                        "content_affinity": metrics.get("content_affinity", []),
+                        "battle_of_ais": metrics.get("battle_of_ais", []),
+                        "engagement_score": metrics.get("engagement_score", 0)
                     }
                 )
         except Exception as bqe:

@@ -121,6 +121,12 @@ class TrafficIABattleItem(BaseModel):
     engagement_score: float
     relative_ratio: Optional[float] = None
     ratio_label: Optional[str] = None
+    raw_avg_duration_sec: Optional[float] = None
+    landing_pages: Optional[List[Dict[str, Any]]] = None
+    conversion_breakdown: Optional[Dict[str, Any]] = None
+    purchase_count: Optional[int] = None
+    purchase_revenue: Optional[float] = None
+    purchase_rate: Optional[str] = None
 
 class ConfidenceIndex(BaseModel):
     """Modelo para índice de confianza detallado."""

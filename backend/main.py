@@ -44,10 +44,13 @@ if os.path.exists(assets_dir):
 
 @app.get("/media-impact/{path:path}")
 async def serve_media_impact_catchall(request: Request, path: str):
-    # Si la ruta apunta a un archivo estático físico (ej: favicon.svg, logo_llyc.svg, assets/...)
-    file_path = os.path.join(STATIC_DIR, path)
-    if os.path.exists(file_path) and os.path.isfile(file_path):
-        return FileResponse(file_path)
+    # Validar que la ruta resuelta no intente escapar del directorio estático
+    resolved_path = os.path.abspath(os.path.join(STATIC_DIR, path))
+    static_root = os.path.abspath(STATIC_DIR)
+
+    # Si la ruta apunta a un archivo estático físico legítimo dentro de STATIC_DIR
+    if resolved_path.startswith(static_root) and os.path.exists(resolved_path) and os.path.isfile(resolved_path):
+        return FileResponse(resolved_path)
 
     # Si es una petición de API fallida, no servir el HTML de la SPA para evitar errores de tipo MIME
     if path.startswith("api/"):

@@ -1,4 +1,4 @@
-﻿import pandas as pd
+import pandas as pd
 import logging
 import os
 import io
@@ -25,21 +25,26 @@ class LocalDataService:
         """Sube y procesa un archivo desde FastAPI UploadFile."""
         try:
             content = await file.read()
-            filename = file.filename
+            raw_filename = getattr(file, "filename", None) or "uploaded_file.csv"
+            safe_filename = os.path.basename(raw_filename)
             
+            # Validar que el archivo resuelto permanezca estrictamente dentro de UPLOAD_DIR
+            file_path = os.path.abspath(os.path.join(UPLOAD_DIR, safe_filename))
+            if not file_path.startswith(os.path.abspath(UPLOAD_DIR)):
+                raise ValueError("Acceso o nombre de ruta de archivo no permitido.")
+
             # Guardar en disco
-            file_path = os.path.join(UPLOAD_DIR, filename)
             with open(file_path, "wb") as f:
                 f.write(content)
             
-            logger.info(f"File {filename} saved for user {user_email}")
+            logger.info(f"File {safe_filename} saved for user {user_email}")
             
             # Cargar y analizar
-            result = self._load_df_from_disk(filename)
+            result = self._load_df_from_disk(safe_filename)
             
             if result["status"] == "success":
                 # Devolver un property_id especial que empiece con local:
-                result["property_id"] = f"local:{filename}"
+                result["property_id"] = f"local:{safe_filename}"
             
             return result
         except Exception as e:
@@ -48,12 +53,16 @@ class LocalDataService:
 
     def load_file(self, file_content: bytes, filename: str) -> Dict[str, Any]:
         try:
-            file_path = os.path.join(UPLOAD_DIR, filename)
+            safe_filename = os.path.basename(filename or "uploaded_file.csv")
+            file_path = os.path.abspath(os.path.join(UPLOAD_DIR, safe_filename))
+            if not file_path.startswith(os.path.abspath(UPLOAD_DIR)):
+                raise ValueError("Acceso o nombre de ruta de archivo no permitido.")
+
             with open(file_path, "wb") as f:
                 f.write(file_content)
             
             logger.info(f"File saved to {file_path}")
-            return self._load_df_from_disk(filename)
+            return self._load_df_from_disk(safe_filename)
 
         except Exception as e:
             logger.error(f"Error loading local file: {e}")
@@ -61,9 +70,13 @@ class LocalDataService:
 
     def _load_df_from_disk(self, filename: str) -> Dict[str, Any]:
         try:
-            file_path = os.path.join(UPLOAD_DIR, filename)
+            safe_filename = os.path.basename(filename)
+            file_path = os.path.abspath(os.path.join(UPLOAD_DIR, safe_filename))
+            if not file_path.startswith(os.path.abspath(UPLOAD_DIR)):
+                raise ValueError("Acceso o nombre de ruta de archivo no permitido.")
+
             if not os.path.exists(file_path):
-                raise FileNotFoundError(f"File {filename} not found")
+                raise FileNotFoundError(f"File {safe_filename} not found")
             
             file_extension = os.path.splitext(filename)[1].lower()
             
@@ -191,7 +204,8 @@ class LocalDataService:
                 try:
                     # Agrupar si hay dimensiones y métricas
                     result_df = target_df.groupby(real_dims)[real_mets].sum().reset_index()
-                except:
+                except Exception as e:
+                    logger.debug(f"Grouping fallback to selection in local_data_service: {e}")
                     result_df = target_df[cols_to_select]
             else:
                 result_df = target_df[cols_to_select]

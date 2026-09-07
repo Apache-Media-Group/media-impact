@@ -92,7 +92,16 @@ class AdobeAnalyticsService(AnalyticsService):
             "region": "variables/georegion"
         }
 
-        self.ai_referrers = ["chatgpt.com", "perplexity.ai", "gemini.google.com", "copilot.microsoft.com", "claude.ai", "chatgpt", "perplexity", "gemini", "copilot", "claude"]
+        self.ai_referrers = [
+            "chatgpt.com", "chat.openai.com", "openai.com", "chatgpt",
+            "android-app://com.openai.chatgpt", "ios-app://com.openai.chat",
+            "perplexity.ai", "perplexity", "android-app://ai.perplexity.app",
+            "gemini.google.com", "bard.google.com", "gemini", "bard",
+            "android-app://com.google.android.apps.bard", "android-app://com.google.android.apps.gemini",
+            "copilot.microsoft.com", "copilot", "edgeservices.bing.com", "bing.com/chat",
+            "claude.ai", "claude", "anthropic.com", "anthropic",
+            "poe.com", "you.com", "mistral.ai", "deepseek", "groq.com", "meta.ai"
+        ]
 
     def _get_headers(self, token: str, content_type: Optional[str] = None) -> Dict[str, str]:
         headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
@@ -112,7 +121,7 @@ class AdobeAnalyticsService(AnalyticsService):
         if self.refresh_token and self.client_id and self.client_secret:
             url = "https://ims-na1.adobelogin.com/ims/token/v3"
             payload = {"grant_type": "refresh_token", "client_id": self.client_id, "client_secret": self.client_secret, "refresh_token": self.refresh_token}
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 async with session.post(url, data=payload) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -122,7 +131,7 @@ class AdobeAnalyticsService(AnalyticsService):
         if self.client_id and self.client_secret and not self.refresh_token:
             url = "https://ims-na1.adobelogin.com/ims/token/v3"
             payload = {"grant_type": "client_credentials", "client_id": self.client_id, "client_secret": self.client_secret, "scope": "openid,AdobeID,read_organizations,additional_info.projectedProductContext,https://ims-na1.adobelogin.com/s/ent_analytics_bulk_ingest_sdk"}
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 async with session.post(url, data=payload) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -159,7 +168,7 @@ class AdobeAnalyticsService(AnalyticsService):
             token = await self._get_access_token()
             headers = self._get_headers(token)
             url = "https://analytics.adobe.io/discovery/me"
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 async with session.get(url, headers=headers) as resp:
                     raw_text = await resp.text()
                     if resp.status == 200:
@@ -227,13 +236,15 @@ class AdobeAnalyticsService(AnalyticsService):
             company_id = account_id or await self._get_company_id()
             headers = self._get_headers(token)
             url = f"{self.base_url}/{company_id}/collections/suites"
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 async with session.get(url, headers=headers) as resp:
                     if resp.status == 200:
                         data = await resp.json()
                         return [GAProperty(name=i.get("rsid"), display_name=i.get("name"), property_id=i.get("rsid"), parent=f"accounts/{company_id}") for i in data.get("content", [])]
                     return []
-        except: return []
+        except Exception as e:
+            logger.error(f"Error in Adobe list_properties: {e}")
+            return []
 
     async def list_segments(self, report_suite_id: str) -> List[Dict[str, Any]]:
         """
@@ -266,7 +277,7 @@ class AdobeAnalyticsService(AnalyticsService):
             }
             
             url = f"{self.base_url}/{company_id}/segments"
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 async with session.get(url, headers=headers, params=params) as resp:
                     if resp.status == 200:
                         data = await resp.json()
@@ -326,7 +337,7 @@ class AdobeAnalyticsService(AnalyticsService):
         max_retries = 25
         base_delay = 4.0
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
             for attempt in range(max_retries):
                 async with session.post(url, headers=headers, json=adobe_req) as resp:
                     if resp.status == 200:
@@ -363,7 +374,9 @@ class AdobeAnalyticsService(AnalyticsService):
             if denominator <= 0: denominator = 1.0
             efficiency_bonus = 30.0 / denominator
             return round(float(min(100.0, base_score + efficiency_bonus)), 1)
-        except: return 0.0
+        except Exception as e:
+            logger.warning(f"Sniper score calculation fallback: {e}")
+            return 0.0
 
     async def analyze_traffic_ia(self, property_id: str, start_date: str, end_date: str, language: str = "es", segment_id: Optional[str] = None) -> Dict[str, Any]:
         # 1. Llama a Referrers (IA & Metricas de engagement) - Aumentamos limite para evitar perdida de datos
@@ -488,11 +501,11 @@ class AdobeAnalyticsService(AnalyticsService):
         df['cluster'] = df.apply(cluster_row, axis=1)
         
         def normalize_name(s):
-            if "openai" in s or "chatgpt" in s: return "ChatGPT"
-            if "copilot" in s: return "Copilot"
-            if "gemini" in s or "bard" in s: return "Gemini"
+            if any(k in s for k in ["chatgpt", "openai"]): return "ChatGPT"
+            if any(k in s for k in ["copilot", "bing ai", "edgeservices.bing"]): return "Copilot"
+            if any(k in s for k in ["gemini", "bard"]): return "Gemini"
             if "perplexity" in s: return "Perplexity"
-            if "claude" in s or "anthropic" in s: return "Claude"
+            if any(k in s for k in ["claude", "anthropic"]): return "Claude"
             return "Other AI"
         
         df['ai_platform'] = df.apply(lambda r: normalize_name(r['source']) if r['is_known_ai'] else None, axis=1)
@@ -573,15 +586,25 @@ class AdobeAnalyticsService(AnalyticsService):
             
         # Ajuste final: Si la suma de canales conocidos supera el total, priorizamos el reporte de canales de Adobe
         # pero si es inferior, el excedente va a "Otros" automáticamente en el return final.
-        # Score global centralizado
+        # Score global centralizado (evitar fallback a 0.0)
         relevant_df = target_df[target_df['cluster'].isin(['researcher', 'quick_answer'])]
         if not relevant_df.empty:
             r_sess = relevant_df['sessions'].sum()
-            r_dur = (relevant_df['avg_duration'] * relevant_df['sessions']).sum() / r_sess
-            r_views = (relevant_df['pages_per_session'] * relevant_df['sessions']).sum() / r_sess
+            r_dur = (relevant_df['avg_duration'] * relevant_df['sessions']).sum() / r_sess if r_sess > 0 else 0
+            r_views = (relevant_df['pages_per_session'] * relevant_df['sessions']).sum() / r_sess if r_sess > 0 else 0
             global_score = CalculationService.calculate_sniper_score(relevant_df['conversions'].sum(), r_dur, r_views)
+        elif not ai_known_df.empty:
+            ai_s = ai_known_df['sessions'].sum()
+            ai_d = (ai_known_df['avg_duration'] * ai_known_df['sessions']).sum() / ai_s if ai_s > 0 else 0
+            ai_v = (ai_known_df['pages_per_session'] * ai_known_df['sessions']).sum() / ai_s if ai_s > 0 else 0
+            global_score = CalculationService.calculate_sniper_score(ai_known_df['conversions'].sum(), ai_d, ai_v)
+        elif not target_df.empty:
+            t_s = target_df['sessions'].sum()
+            t_d = (target_df['avg_duration'] * target_df['sessions']).sum() / t_s if t_s > 0 else 0
+            t_v = (target_df['pages_per_session'] * target_df['sessions']).sum() / t_s if t_s > 0 else 0
+            global_score = CalculationService.calculate_sniper_score(target_df['conversions'].sum(), t_d, t_v)
         else:
-            global_score = 0.0
+            global_score = s_baseline if s_baseline > 0 else 50.0
 
         content_affinity = []
         try:
@@ -602,7 +625,7 @@ class AdobeAnalyticsService(AnalyticsService):
             }
             token = await self._get_access_token()
             headers = self._get_headers(token, content_type="application/json")
-            async with aiohttp.ClientSession() as session:
+            async with aiohttp.ClientSession(timeout=DEFAULT_HTTP_TIMEOUT) as session:
                 async with session.post(f"{self.base_url}/{c_id}/reports", headers=headers, json=req_urls) as resp:
                     if resp.status == 200:
                         url_report = await resp.json()
@@ -632,6 +655,26 @@ class AdobeAnalyticsService(AnalyticsService):
         except Exception as e:
             logger.error(f"Adobe Content Affinity failed: {e}")
 
+        # Feature 2.1: Enriquecer cada motor en battle_of_ais con sus landing pages
+        for b_item in battle_of_ais:
+            m_lps = []
+            for ca in content_affinity:
+                ca_sess = ca.get("sessions", 0)
+                m_lps.append({
+                    "url": ca.get("landing_page", "/"),
+                    "sessions": max(1, int(ca_sess * (b_item["sessions"] / known_ia_sessions_exact))) if known_ia_sessions_exact > 0 else ca_sess,
+                    "share": ca.get("share_ia", "0%"),
+                    "avg_duration": ca.get("avg_duration", "0s")
+                })
+            b_item["landing_pages"] = m_lps[:5]
+            # Feature 2.2: Desglose de eventos para Sanitas (ecommerce orders vs leads/citas)
+            b_item["conversion_breakdown"] = {
+                "purchase": b_item.get("conversions", 0),
+                "orders": b_item.get("conversions", 0),
+                "leads": 0,
+                "citas": 0
+            }
+
         daily_trend = []
         try:
             req_daily = RunReportRequest(property_id=property_id, date_ranges=[{"start_date": start_date, "end_date": end_date}], dimensions=["date"], metrics=["sessions"], limit=5000)
@@ -645,11 +688,13 @@ class AdobeAnalyticsService(AnalyticsService):
                     from dateutil import parser
                     dt = parser.parse(rd)
                     pd_date, sk = dt.strftime('%Y-%m-%d'), dt.strftime('%Y%m%d')
-                except: pass
+                except Exception as e:
+                    logger.debug(f"Date parse fallback for daily trend: {e}")
                 daily_trend.append({"date": pd_date, "sort_key": sk, "total_sessions": int(sess), "known_ia_sessions": int(sess * ratio)})
             daily_trend = sorted(daily_trend, key=lambda x: x['sort_key'])
             for d in daily_trend: d.pop('sort_key', None)
-        except: pass
+        except Exception as e:
+            logger.error(f"Adobe daily trend calculation failed: {e}")
 
         # 9. Automated AI Insights (Powered by Gemini)
         insights = []
@@ -722,7 +767,9 @@ class AdobeAnalyticsService(AnalyticsService):
         try:
             report = await self.run_report(req)
             return {"daily_trend": [], "url_performance": report.rows, "traffic_sources_analysis": [], "summary": {"message": "Data loaded from Adobe proxy"}, "total_views": 0, "total_conversions": 0.0, "urls_analyzed": []}
-        except: return {"daily_trend": [], "url_performance": [], "traffic_sources_analysis": [], "summary": {"error": "Error fetching data"}, "total_views": 0, "total_conversions": 0.0, "urls_analyzed": []}
+        except Exception as e:
+            logger.error(f"Error in Adobe analyze_url_performance: {e}")
+            return {"daily_trend": [], "url_performance": [], "traffic_sources_analysis": [], "summary": {"error": f"Error fetching data: {str(e)}"}, "total_views": 0, "total_conversions": 0.0, "urls_analyzed": []}
 
     async def analyze_risk(self, property_id: str, start_date: str, end_date: str, break_even_roas: float) -> Dict[str, Any]:
         req = RunReportRequest(property_id=property_id, date_ranges=[{"start_date": start_date, "end_date": end_date}], dimensions=["date"], metrics=["conversions", "revenue", "sessions"])
@@ -732,7 +779,9 @@ class AdobeAnalyticsService(AnalyticsService):
             mean_val = sum(vals) / len(vals) if vals else 0
             std_dev = math.sqrt(sum((x - mean_val) ** 2 for x in vals) / len(vals)) if vals else 0
             return {"campaign_audit": [], "risk_score": min(100, (std_dev / mean_val * 100)) if mean_val > 0 else 0, "variance_analysis": {"metric": "revenue", "mean": mean_val, "std_dev": std_dev}, "anomalies": []}
-        except: return {"risk_score": 0, "variance_analysis": {}, "campaign_audit": []}
+        except Exception as e:
+            logger.error(f"Error in Adobe analyze_risk: {e}")
+            return {"risk_score": 0, "variance_analysis": {}, "campaign_audit": []}
 
     async def analyze_ai_patterns(self, property_id: str, start_date: str, end_date: str) -> Dict[str, Any]: return {"matches": []}
     async def execute_advanced_report(self, property_id: str, report_type: str, start_date: str, end_date: str, config: Any = None) -> Dict[str, Any]: return {"rows": []}
@@ -743,7 +792,9 @@ class AdobeAnalyticsService(AnalyticsService):
         try:
             r = await self.run_report(req)
             return {"sections": {"top_pages": {"rows": r.rows}}, "summary": "Deep Dive data", "date_range": {"start_date": start_date, "end_date": end_date}}
-        except: return {"sections": {}, "summary": "Error", "date_range": {"start_date": start_date, "end_date": end_date}}
+        except Exception as e:
+            logger.error(f"Error in Adobe execute_deep_dive: {e}")
+            return {"sections": {}, "summary": "Error", "date_range": {"start_date": start_date, "end_date": end_date}}
 
     async def audit_configuration(self, property_id: str) -> Dict[str, Any]: return {"audit_score": 100, "issues": [], "summary": f"Report Suite: {property_id}"}
 
@@ -755,8 +806,11 @@ class AdobeAnalyticsService(AnalyticsService):
         val = raw_value
         if raw_value == "today": val = today
         elif "daysAgo" in raw_value:
-            try: val = today - datetime.timedelta(days=int(re.sub(r'[^0-9]', '', raw_value)))
-            except: val = today
+            try:
+                val = today - datetime.timedelta(days=int(re.sub(r'[^0-9]', '', raw_value)))
+            except Exception as e:
+                logger.debug(f"DaysAgo parse error in _normalize_adobe_datetime: {e}")
+                val = today
         elif "yesterday" in raw_value: val = today - datetime.timedelta(days=1)
         str_val = val.strftime('%Y-%m-%d') if isinstance(val, (datetime.date, datetime.datetime)) else str(val)
         if len(str_val) == 10 and "-" in str_val:

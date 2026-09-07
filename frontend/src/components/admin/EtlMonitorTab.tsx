@@ -88,6 +88,30 @@ export const EtlMonitorTab: React.FC<EtlMonitorTabProps> = ({
     }
   };
 
+  const triggerResetStatus = async (tenantId: string) => {
+    try {
+      setActionMessage({
+        type: 'success',
+        text: `Cancelando y reseteando estado de despliegue para '${tenantId}'...`
+      });
+      const res = await secureFetch(`/api/v1/mcp-analytics/admin/tenants/${tenantId}/reset-status`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        setActionMessage({
+          type: 'success',
+          text: `Estado de despliegue reseteado con éxito para '${tenantId}'. Listo para re-desplegar.`
+        });
+        fetchEtlData();
+        onRefreshTenants();
+      } else {
+        throw new Error(`Error al resetear el estado de despliegue para '${tenantId}'`);
+      }
+    } catch (err: any) {
+      setActionMessage({ type: 'error', text: err.message || 'Error al resetear estado' });
+    }
+  };
+
   useEffect(() => {
     fetchEtlData();
   }, []);
@@ -124,15 +148,27 @@ export const EtlMonitorTab: React.FC<EtlMonitorTabProps> = ({
                   <div>
                     <h3 className="font-black text-xs uppercase tracking-wider text-white">{t.tenant_name}</h3>
                     <span className="text-[9px] text-mid mb-2 block">ID: {t.tenant_id}</span>
-                    <button
-                      type="button"
-                      onClick={() => triggerDirectRedeploy(t.tenant_id)}
-                      disabled={isDeploying || redeploying}
-                      className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-navy border border-amber-500/20 rounded text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-2.5 h-2.5 ${(isDeploying || redeploying) ? 'animate-spin' : ''}`} />
-                      {isDeploying ? 'Desplegando...' : 'Re-desplegar ETL'}
-                    </button>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => triggerDirectRedeploy(t.tenant_id)}
+                        disabled={redeploying}
+                        className="px-2 py-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-navy border border-amber-500/20 rounded text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-2.5 h-2.5 ${redeploying ? 'animate-spin' : ''}`} />
+                        {isDeploying ? 'Re-desplegar (Forzar)' : 'Re-desplegar ETL'}
+                      </button>
+                      {isDeploying && (
+                        <button
+                          type="button"
+                          onClick={() => triggerResetStatus(t.tenant_id)}
+                          title="Cancela y limpia el estado de despliegue si se quedó estancado"
+                          className="px-2 py-1 bg-red-500/10 hover:bg-red-500 text-red-400 hover:text-white border border-red-500/20 rounded text-[9px] font-black uppercase tracking-wider transition-all flex items-center gap-1"
+                        >
+                          ⏹️ Cancelar
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-1.5 flex-wrap justify-end">
                     <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase ${

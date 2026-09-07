@@ -2,7 +2,7 @@
 import os
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, BackgroundTasks
@@ -246,12 +246,41 @@ async def list_tenants_admin(
                 tdata["authorized_emails"] = []
             if "authorized_domains" not in tdata or not isinstance(tdata["authorized_domains"], list):
                 tdata["authorized_domains"] = []
-            if "ga4_conversion_events" not in tdata or not isinstance(tdata["ga4_conversion_events"], list):
-                tdata["ga4_conversion_events"] = []
+            # Auto-limpieza de estados de despliegue huérfanos/estancados (> 15 minutos)
+            dep_status = tdata.get("deployment_status")
+            if isinstance(dep_status, dict) and dep_status.get("status") == "deploying":
+                updated_at_str = dep_status.get("updated_at")
+                is_stale = False
+                if updated_at_str:
+                    try:
+                        clean_dt = updated_at_str.replace("Z", "+00:00")
+                        updated_time = datetime.fromisoformat(clean_dt)
+                        now_dt = datetime.now(timezone.utc) if updated_time.tzinfo else datetime.utcnow()
+                        if (now_dt - updated_time) > timedelta(minutes=15):
+                            is_stale = True
+                    except Exception:
+                        is_stale = True
+                else:
+                    is_stale = True
                 
+                if is_stale:
+                    logger.info(f"🧹 Limpiando estado de despliegue estancado para '{tenant_id}'.")
+                    tdata["deployment_status"] = {
+                        "status": "failed",
+                        "step": "Proceso Interrumpido / Expirado",
+                        "message": "La tarea en segundo plano previa expiró o se interrumpió. Puedes pulsar 'Re-desplegar' para reiniciar.",
+                        "updated_at": datetime.utcnow().isoformat()
+                    }
+                    if tm.db and tenant_id:
+                        try:
+                            tm.db.collection("tenants").document(tenant_id).update({
+                                "deployment_status": tdata["deployment_status"]
+                            })
+                        except Exception as fe:
+                            logger.warning(f"No se pudo actualizar estado huérfano en Firestore: {fe}")
+
             tenants.append(tdata)
 
-            
         return tenants
     except Exception as e:
         logger.error(f"Error al listar tenants en admin: {e}")
@@ -762,6 +791,30 @@ async def redeploy_tenant_etl_admin(
     except Exception as e:
         logger.error(f"Error al re-desplegar ETL para {tenant_id}: {e}")
         update_deployment_status(tenant_id_clean, "failed", "Error en Despliegue", f"No se pudo re-desplegar: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/admin/tenants/{tenant_id}/reset-status", response_model=Dict[str, Any])
+async def reset_tenant_deployment_status_admin(
+    tenant_id: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Cancela y resetea de forma inmediata el estado de despliegue de un inquilino a 'idle' o cancelado (Solo Superadmin LLYC).
+    """
+    try:
+        tenant_id_clean = tenant_id.lower().strip()
+        update_deployment_status(
+            tenant_id_clean,
+            "failed",
+            "Despliegue Cancelado / Reseteado",
+            "El estado de despliegue fue reseteado manualmente por el administrador. Listo para re-desplegar."
+        )
+        return {
+            "status": "success",
+            "message": f"Estado de despliegue de '{tenant_id_clean}' reseteado con éxito."
+        }
+    except Exception as e:
+        logger.error(f"Error al resetear estado de despliegue de {tenant_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/admin/tenants/{tenant_id}/logo", response_model=Dict[str, Any])

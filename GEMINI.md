@@ -207,3 +207,10 @@ Para realizar esta integración de manera segura y alineada con los estándares 
 *   **Fuentes Únicas de Verdad:** Toda métrica mostrada en el frontend debe provenir de cálculos reales ejecutados en el backend a partir de los datos almacenados en Google BigQuery o extraídos en vivo de las APIs oficiales (GA4, Adobe, Peec.ai, Brandlight).
 *   **Ausencia de Datos:** Si un inquilino no tiene configurado un servicio (ej. no tiene Brandlight) o no hay datos históricos en la base de datos para una métrica específica, la aplicación debe manejar esta ausencia de forma elegante (ej. ocultando las gráficas con renderizado condicional o mostrando un estado vacío/N/A). 
 *   **Cero Excepciones:** Jamás se creará un script o lógica para inyectar datos simulados en la base de datos o en la respuesta de la API para "hacer que se vea bonito". La fidelidad y exactitud de los datos es la prioridad máxima de esta plataforma de inteligencia.
+
+---
+
+## 🧪 10. Trazabilidad de Pruebas y Scripts de Verificación
+
+**REGLA ESTRICTA DE EJECUCIÓN PYTHON**: Queda estrictamente prohibido ejecutar comandos ad-hoc de Python directamente en la consola (ej. `python3 -c "..."`). Todo script de prueba, validación o diagnóstico debe escribirse obligatoriamente en un archivo `.py` persistente dentro del directorio de tests (ej. `backend/tests/`) para asegurar la trazabilidad, reproducibilidad y auditoría técnica antes de su ejecución.
+

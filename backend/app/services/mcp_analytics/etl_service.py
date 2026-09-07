@@ -11,6 +11,7 @@ from app.services.mcp_analytics.brandlight_service import BrandlightService
 from app.services.mcp_analytics.peec_service import PeecService
 from app.services.mcp_analytics.ga_service import GAService
 from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
+from app.services.mcp_analytics.calculation_service import CalculationService
 from app.models.mcp_analytics.core_models import RunReportRequest
 
 logger = logging.getLogger(__name__)
@@ -274,11 +275,11 @@ class MCPETLService:
                         cluster = "quick_answer"
                     
                     is_chatgpt = "chatgpt" in source_val or "openai" in source_val
-                    is_gemini = "gemini" in source_val or "google bard" in source_val or "android-app://com.google.android.apps.bard" in source_val
+                    is_gemini = "gemini" in source_val or "google bard" in source_val or "android-app://com.google.android.apps.bard" in source_val or "android-app://com.google.android.apps.gemini" in source_val
                     is_perplexity = "perplexity" in source_val
                     is_claude = "claude" in source_val or "anthropic" in source_val
-                    is_copilot = "copilot" in source_val or "bing ai" in source_val
-                    is_other_ai = (not (is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot)) and ("ai-assistant" in source_val or "chat" in source_val)
+                    is_copilot = "copilot" in source_val or "bing ai" in source_val or "edgeservices.bing" in source_val
+                    is_other_ai = (not (is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot)) and any(x in source_val for x in ["ai-assistant", "poe.com", "you.com", "mistral.ai", "deepseek", "groq.com", "meta.ai"])
                     is_referred = is_chatgpt or is_gemini or is_perplexity or is_claude or is_copilot or is_other_ai
                     
                     key = f"{ga4_property_id}_all-users_{date_val}"
@@ -569,7 +570,11 @@ class MCPETLService:
                                 "quick_answer_sessions": round(total_ai_for_day * quick_answer_ratio),
                             "transactional_sessions": round(total_ai_for_day * transactional_ratio),
                             "casual_sessions": round(total_ai_for_day * casual_ratio),
-                            "engagement_score": float(r.get("conversions", 0)),
+                            "engagement_score": CalculationService.calculate_sniper_score(
+                                float(r.get("conversions", 0)),
+                                float(r.get("avg_duration", 0)),
+                                float(r.get("pages_per_session", 0))
+                            ),
                             "company_id": chosen_company,
                             "property_id": chosen_property,
                             "segment_id": seg_id
@@ -748,9 +753,9 @@ class MCPETLService:
         brandlight_creds_raw = credentials.get("brandlight-key")
         if brandlight_creds_raw:
             if on_progress:
-                on_progress("Ejecutando Ingesta (Brandlight BI)", "Iniciando pausa de respiro preventivo de 30s para evitar Rate-Limits en Brandlight...")
-            # Pausa de respiro de 30 segundos antes de comenzar Brandlight BI
-            await asyncio.sleep(30.0)
+                on_progress("Ejecutando Ingesta (Brandlight BI)", "Iniciando sincronización con Brandlight BI...")
+            # Pausa de cortesía breve para evitar ráfagas
+            await asyncio.sleep(5.0)
             if on_progress:
                 on_progress("Ejecutando Ingesta (Brandlight BI)", "Descargando e insertando datos de visibilidad y Share of Voice en LLMs...")
             try:

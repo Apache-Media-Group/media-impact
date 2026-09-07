@@ -27,8 +27,14 @@ class GATrafficIAService:
         
         # 1. Deterministic AI Sources (The "Known" List)
         self.ai_referrers = [
-            "chatgpt.com", "perplexity.ai", "gemini.google.com", "copilot.microsoft.com", "claude.ai", 
-            "chatgpt", "perplexity", "gemini", "copilot", "claude"
+            "chatgpt.com", "chat.openai.com", "openai.com", "chatgpt",
+            "android-app://com.openai.chatgpt", "ios-app://com.openai.chat",
+            "perplexity.ai", "perplexity", "android-app://ai.perplexity.app",
+            "gemini.google.com", "bard.google.com", "gemini", "bard",
+            "android-app://com.google.android.apps.bard", "android-app://com.google.android.apps.gemini",
+            "copilot.microsoft.com", "copilot", "edgeservices.bing.com", "bing.com/chat",
+            "claude.ai", "claude", "anthropic.com", "anthropic",
+            "poe.com", "you.com", "mistral.ai", "deepseek", "groq.com", "meta.ai"
         ]
         
         # 2. AI UTM Patterns
@@ -66,48 +72,58 @@ class GATrafficIAService:
         s_baseline = CalculationService.calculate_sniper_score(total_conv, avg_dur_base, pages_base)
         
         conversion_breakdown = None
-        if conversion_events:
+        # Resolver eventos de conversión a monitorizar (incluyendo ecommerce purchase y leads)
+        events_to_query = list(conversion_events) if conversion_events else []
+        for def_ev in ["purchase", "generate_lead", "lead", "cita", "formulario"]:
+            if def_ev not in events_to_query:
+                events_to_query.append(def_ev)
+
+        if events_to_query:
             from google.analytics.data_v1beta.types import FilterExpressionList, FilterExpression, Filter
-            event_filters = [FilterExpression(filter=Filter(field_name="eventName", string_filter=Filter.StringFilter(value=ev.strip(), match_type=Filter.StringFilter.MatchType.EXACT))) for ev in conversion_events if ev.strip()]
+            event_filters = [FilterExpression(filter=Filter(field_name="eventName", string_filter=Filter.StringFilter(value=ev.strip(), match_type=Filter.StringFilter.MatchType.EXACT))) for ev in events_to_query if ev.strip()]
             if event_filters:
                 event_or_group = FilterExpression(or_group=FilterExpressionList(expressions=event_filters))
                 request = RunReportRequest(
                     property=property_id,
                     date_ranges=[DateRange(start_date=date_range["start_date"], end_date=date_range["end_date"])],
                     dimensions=[Dimension(name="sessionSource"), Dimension(name="eventName")],
-                    metrics=[Metric(name="eventCount")],
+                    metrics=[Metric(name="eventCount"), Metric(name="purchaseRevenue")],
                     dimension_filter=event_or_group
                 )
                 try:
                     response = self.client.run_report(request)
                     conversion_breakdown = {}
                     def normalize_name(s):
-                        if "openai" in s or "chatgpt" in s: return "ChatGPT"
-                        if "copilot" in s: return "Copilot"
-                        if "gemini" in s or "bard" in s: return "Gemini"
+                        if any(k in s for k in ["chatgpt", "openai"]): return "ChatGPT"
+                        if any(k in s for k in ["copilot", "bing ai", "edgeservices.bing"]): return "Copilot"
+                        if any(k in s for k in ["gemini", "bard"]): return "Gemini"
                         if "perplexity" in s: return "Perplexity"
-                        if "claude" in s or "anthropic" in s: return "Claude"
+                        if any(k in s for k in ["claude", "anthropic"]): return "Claude"
                         return "Other AI"
                         
                     for row in response.rows:
                         source = row.dimension_values[0].value.lower()
                         event_name = row.dimension_values[1].value
-                        count = int(row.metric_values[0].value)
+                        count = int(float(row.metric_values[0].value))
+                        rev = float(row.metric_values[1].value) if len(row.metric_values) > 1 and row.metric_values[1].value else 0.0
                         if any(ref in source for ref in self.ai_referrers):
                             ai_platform = normalize_name(source)
                             if ai_platform not in conversion_breakdown:
                                 conversion_breakdown[ai_platform] = {}
                             conversion_breakdown[ai_platform][event_name] = conversion_breakdown[ai_platform].get(event_name, 0) + count
+                            if event_name == "purchase" and rev > 0:
+                                conversion_breakdown[ai_platform]["purchase_revenue"] = conversion_breakdown[ai_platform].get("purchase_revenue", 0.0) + rev
                 except Exception as e:
                     logger.error(f"Error fetching conversion breakdown: {e}")
                     
-        battle_of_ais = self._analyze_battle_of_ais(df_aggregated, s_baseline, conversion_breakdown)
+        battle_of_ais = self._analyze_battle_of_ais(df_aggregated, s_baseline, conversion_breakdown, df_granular)
         battle_of_ais_total_sessions = sum(item['sessions'] for item in battle_of_ais)
         
         # --- CORRECCIÓN: Clusters sobre sesiones IA ---
         ai_granular = df_granular[df_granular['is_known_ai']].copy()
         if not ai_granular.empty:
             ai_granular = self._assign_behavioral_clusters(ai_granular)
+
             cluster_distribution = ai_granular.groupby('cluster')['sessions'].sum().to_dict()
         else:
             cluster_distribution = {"casual": 0, "researcher": 0, "quick_answer": 0, "transactional": 0}
@@ -278,16 +294,16 @@ class GATrafficIAService:
     def _tag_traffic_sources(self, df: pd.DataFrame) -> pd.DataFrame:
         df['is_known_ai'] = df['source'].apply(lambda s: any(ref in s for ref in self.ai_referrers))
         def normalize_name(s):
-            if "openai" in s or "chatgpt" in s: return "ChatGPT"
-            if "copilot" in s: return "Copilot"
-            if "gemini" in s or "bard" in s: return "Gemini"
+            if any(k in s for k in ["chatgpt", "openai"]): return "ChatGPT"
+            if any(k in s for k in ["copilot", "bing ai", "edgeservices.bing"]): return "Copilot"
+            if any(k in s for k in ["gemini", "bard"]): return "Gemini"
             if "perplexity" in s: return "Perplexity"
-            if "claude" in s or "anthropic" in s: return "Claude"
+            if any(k in s for k in ["claude", "anthropic"]): return "Claude"
             return "Other AI"
         df['ai_platform'] = df.apply(lambda r: normalize_name(r['source']) if r['is_known_ai'] else None, axis=1)
         return df
 
-    def _analyze_battle_of_ais(self, df: pd.DataFrame, s_baseline: float = 1.0, conversion_breakdown: Dict = None) -> List[Dict]:
+    def _analyze_battle_of_ais(self, df: pd.DataFrame, s_baseline: float = 1.0, conversion_breakdown: Dict = None, df_granular: pd.DataFrame = None) -> List[Dict]:
         ai_df = df[df['is_known_ai']].copy()
         if ai_df.empty: return []
         results = []
@@ -317,6 +333,7 @@ class GATrafficIAService:
                 "platform": platform, 
                 "sessions": int(sess), 
                 "avg_duration": dur_str, 
+                "raw_avg_duration_sec": round(float(avg_dur), 1),
                 "pages_per_session": avg_depth, 
                 "conversions": int(p_data['conversions'].sum()),
                 "conversion_rate": f"{cv_rate}%", 
@@ -324,8 +341,42 @@ class GATrafficIAService:
                 "relative_ratio": relative_ratio,
                 "ratio_label": final_label
             }
+
+            # Feature 2.1: Desglose de Top Landing Pages recomendadas por este motor
+            if df_granular is not None and not df_granular.empty and 'landing_page' in df_granular.columns:
+                p_granular = df_granular[df_granular['ai_platform'] == platform]
+                if not p_granular.empty:
+                    top_lps = (
+                        p_granular.groupby('landing_page')
+                        .agg({'sessions': 'sum', 'userEngagementDuration': 'mean'})
+                        .sort_values('sessions', ascending=False)
+                        .head(5)
+                        .reset_index()
+                    )
+                    lps = []
+                    for _, lp_r in top_lps.iterrows():
+                        lp_s = int(lp_r['sessions'])
+                        lp_dur = float(lp_r['userEngagementDuration'])
+                        lm, ls = divmod(int(lp_dur), 60)
+                        dur_fmt = f"{lm:02d}:{ls:02d}" if lp_dur >= 60 else f"{int(lp_dur)}s"
+                        share_val = round((lp_s / sess) * 100, 1) if sess > 0 else 0
+                        lps.append({
+                            "url": str(lp_r['landing_page']),
+                            "sessions": lp_s,
+                            "share": f"{share_val}%",
+                            "avg_duration": dur_fmt
+                        })
+                    res_item["landing_pages"] = lps
+
+            # Feature 2.2: Desglose de conversiones por evento (purchase vs secundarios)
             if conversion_breakdown and platform in conversion_breakdown:
-                res_item["conversion_breakdown"] = conversion_breakdown[platform]
+                plat_conv = conversion_breakdown[platform]
+                res_item["conversion_breakdown"] = plat_conv
+                p_cnt = plat_conv.get("purchase", 0)
+                p_rev = plat_conv.get("purchase_revenue", 0.0)
+                res_item["purchase_count"] = p_cnt
+                res_item["purchase_revenue"] = p_rev
+                res_item["purchase_rate"] = f"{round((p_cnt / sess) * 100, 2)}%" if sess > 0 else "0.0%"
                 
             results.append(res_item)
             
@@ -348,9 +399,20 @@ class GATrafficIAService:
         if not relevant_df.empty:
             s_mass, d_mass, v_mass, c_mass = relevant_df['sessions'].sum(), relevant_df['userEngagementDuration'].sum(), relevant_df['screenPageViews'].sum(), relevant_df['conversions'].sum()
             avg_dur, pages_per, cvr = d_mass/s_mass, v_mass/s_mass, (c_mass/s_mass)*100
-            # --- Score centralizado ---
             score = CalculationService.calculate_sniper_score(c_mass, avg_dur, pages_per)
-        else: avg_dur, pages_per, cvr, score = 0, 0, 0, 0.0
+        else:
+            if not target_df.empty:
+                s_mass = target_df['sessions'].sum()
+                d_mass = target_df['userEngagementDuration'].sum()
+                v_mass = target_df['screenPageViews'].sum()
+                c_mass = target_df['conversions'].sum()
+                avg_dur = d_mass / s_mass if s_mass > 0 else 0
+                pages_per = v_mass / s_mass if s_mass > 0 else 0
+                cvr = (c_mass / s_mass * 100) if s_mass > 0 else 0
+                score = CalculationService.calculate_sniper_score(c_mass, avg_dur, pages_per)
+            else:
+                avg_dur, pages_per, cvr, score = 0, 0, 0, s_baseline
+
         
         source_stats = relevant_df.groupby('source').agg({'sessions': 'sum', 'userEngagementDuration': 'sum', 'screenPageViews': 'sum', 'conversions': 'sum'}).reset_index()
         top_sources = []

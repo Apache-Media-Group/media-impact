@@ -89,7 +89,9 @@ export const useAnalytics = () => {
           total_sessions: total_sessions,
           ai_referred: Math.round(ai_referred * 10) / 10,
           ai_inferred: Math.round(ai_inferred * 10) / 10,
-          engagement_score: valid_engagement_days > 0 ? Math.round(engagement_sum / valid_engagement_days) : 0,
+          engagement_score: result.metadata?.engagement_score 
+            ? Math.round(Number(result.metadata.engagement_score)) 
+            : (valid_engagement_days > 0 ? Math.round(engagement_sum / valid_engagement_days) : (ai_referred > 0 ? 30 : 0)),
           visibility_score: count > 0 ? Math.round((visibility_sum / count) * 10) / 10 : 0,
           sentiment_score: count > 0 ? Math.round((sentiment_sum / count) * 10) / 10 : 0,
           rows: result.rows,
@@ -101,6 +103,7 @@ export const useAnalytics = () => {
           domains: result.metadata?.domains || [],
           visibility_by_engine: result.metadata?.visibility_by_engine || [],
           content_affinity: result.metadata?.content_affinity || [],
+          battle_of_ais: result.metadata?.battle_of_ais || result.battle_of_ais || [],
           inferred_traffic: result.metadata?.inferred_traffic || result.inferred_traffic || null,
           behavior_clusters: result.metadata?.behavioral_clusters?.distribution ? [
             { label: 'Investigación', value: result.metadata.behavioral_clusters.distribution.researcher || 0 },

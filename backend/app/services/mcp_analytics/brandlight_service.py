@@ -67,16 +67,18 @@ class BrandlightService(AnalyticsService):
 
     async def _request(self, method: str, endpoint: str, params: Optional[Dict[str, Any]] = None, data: Optional[Dict[str, Any]] = None) -> Any:
         """
-        Realiza una petición asíncrona hacia la API de Brandlight con soporte para Exponential Backoff en caso de 429.
+        Realiza una petición asíncrona hacia la API de Brandlight con soporte para Exponential Backoff en caso de 429
+        y timeouts estrictos para prevenir bloqueos indefinidos.
         """
         # Delay de seguridad preventivo inicial
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(1.0)
         
         url = f"{self.base_url}{endpoint}"
-        max_retries = 25
-        base_delay = 4.0
+        max_retries = 3
+        base_delay = 2.0
+        client_timeout = aiohttp.ClientTimeout(total=40.0, connect=10.0)
         
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=client_timeout) as session:
             for attempt in range(max_retries):
                 try:
                     async with session.request(method, url, headers=self.headers, params=params, json=data) as response:
@@ -90,7 +92,7 @@ class BrandlightService(AnalyticsService):
                             
                         elif response.status == 429:
                             import random
-                            delay = min(60.0, (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5))
+                            delay = min(15.0, (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5))
                             logger.warning(f"⚠️ Brandlight Rate Limit (429) detectado en intento {attempt+1}/{max_retries}. Durmiendo {delay:.2f}s antes de reintentar...")
                             await asyncio.sleep(delay)
                             continue
@@ -103,7 +105,7 @@ class BrandlightService(AnalyticsService):
                     if attempt == max_retries - 1:
                         logger.error(f"Error final al conectar con la API de Brandlight en {endpoint}: {e}")
                         raise e
-                    delay_err = min(60.0, base_delay * (2 ** attempt))
+                    delay_err = min(15.0, base_delay * (2 ** attempt))
                     await asyncio.sleep(delay_err)
                     
             raise Exception("Brandlight: Límite de reintentos agotado tras recibir continuos códigos 429 (Too Many Requests).")

@@ -62,8 +62,8 @@ else
     fi
 fi
 
-# Iniciar backend en segundo plano
-uvicorn main:app --host 127.0.0.1 --port 8080 --env-file .env > ../backend.log 2>&1 &
+# Iniciar backend en segundo plano con hot-reload activado
+uvicorn main:app --reload --host 127.0.0.1 --port 8080 --env-file .env > ../backend.log 2>&1 &
 BACKEND_PID=$!
 echo "✅ Backend corriendo en http://localhost:8080 (PID: $BACKEND_PID)"
 
