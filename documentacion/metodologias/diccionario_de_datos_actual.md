@@ -82,8 +82,36 @@ Peec.ai es una herramienta enfocada en SOV (Share of Voice) y posicionamiento en
 
 ---
 
-## 4. Brandlight
+## 4. Brandlight BI
+ 
+El servicio de Brandlight en `media_impact` funciona como un conector estructurado bajo la interfaz `AnalyticsService`, preparado para ingerir dimensiones y métricas alineadas al estándar de visibilidad y sentimiento de marca en motores de IA (LLMs) directamente desde su API oficial y Google BigQuery.
 
-El servicio de Brandlight en `media_impact` funciona como un conector estructurado bajo la misma interfaz `AnalyticsService`, preparado para inyectar dimensiones y métricas alineadas al estándar general o métricas nativas del mercado.
+### Dimensiones Principales
+* **`date`**: Fecha de análisis.
+* **`domain`**: Dominio de la marca o competidor monitorizado.
+* **`engine`**: Motor de IA evaluado (ChatGPT, Gemini, Perplexity, Copilot, Claude).
+* **`topic`**: Temática clave o categoría analizada.
 
-*Nota:* Al igual que en la versión Legacy, el diccionario de Brandlight permite adaptaciones y en sus implementaciones base puede simular resultados u homologar métricas transversales.
+### Métricas Principales
+* **`visibility_score`**: Índice cuantitativo de presencia de la marca en respuestas generadas (0-100).
+* **`sentiment_score`**: Calificación semántica y reputacional (0-10).
+* **`share_of_voice`**: Porcentaje de impacto relativo frente al grupo competitivo.
+
+---
+
+## 5. Esquema de Tráfico IA de Alta Intención (Battle of AIs & E-commerce)
+
+Mapeo estructurado expuesto en `/analytics/run-report` y `/analytics/traffic-ia` (`battle_of_ais`):
+
+| Campo | Tipo | Fuente | Descripción |
+| :--- | :--- | :--- | :--- |
+| **`platform`** | `string` | Regex unificado | Nombre normalizado del motor de IA (`ChatGPT`, `Gemini`, `Perplexity`, `Copilot`, `Claude`). |
+| **`sessions`** | `integer` | GA4 / Adobe | Volumen de visitas referidas directamente por el motor. |
+| **`avg_duration`** | `string` | GA4 / Adobe | Duración media formateada (`MM:SS` o `Xs`). |
+| **`raw_avg_duration_sec`** | `float` | GA4 / Adobe | Duración media en segundos en punto flotante para cálculo de fricción. |
+| **`engagement_score`** | `float` | Cálculo canónico | Puntuación Sniper Score de 0 a 100 basada en conversión y fricción logarítmica. |
+| **`landing_pages`** | `array` | GA4 / Adobe | Top 5 URLs de aterrizaje recomendadas (`url`, `sessions`, `share`, `avg_duration`). |
+| **`purchase_count`** | `integer` | GA4 (`purchase`) / Adobe (`orders`) | Pedidos o transacciones comerciales confirmadas procedentes del motor. |
+| **`purchase_revenue`** | `float` | GA4 (`purchaseRevenue`) / Adobe (`revenue`) | Facturación total generada por el tráfico del motor. |
+| **`purchase_rate`** | `string` | Ratio calculado | Tasa de conversión de compras (`(purchase_count / sessions) * 100`). |
+

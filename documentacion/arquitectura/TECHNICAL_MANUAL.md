@@ -135,7 +135,52 @@ El workflow de CI/CD `.github/workflows/deploy.yml` está diseñado bajo un esqu
 
 * **Modularidad y Portabilidad**: No contiene nombres de proyectos GCP hardcodeados. Consume el secreto `${{ secrets.GCP_PROJECT_ID }}` de GitHub para que la API sea portátil a cualquier proyecto en caliente.
 * **`detect-changes` (Job 1)**: Utiliza `dorny/paths-filter` para detectar de forma analítica en qué carpetas del repositorio se han subido cambios.
-* **`deploy-backend` (Job 2)**: Se activa **únicamente** si existen cambios en la carpeta `backend/**`. Compila la imagen con el Dockerfile optimizado (`python:3.11-slim`) en Google Cloud Build y despliega en **GCP Cloud Run** (`llyc-intelligence-api`) en la región `us-central1`.
+* **`deploy-backend` (Job 2)**: Se activa **únicamente** si existen cambios en la carpeta `backend/**`. Compila la imagen con el Dockerfile optimizado (`python:3.11-slim`) en Google Cloud Build y despliega en **GCP Cloud Run** (`llyc-intelligence-api`) en la región `europe-west1` / `us-central1`.
 * **`deploy-frontend` (Job 3)**:
   - **Secuencialidad**: Espera a que el backend se despliegue con éxito (`success`) o sea omitido (`skipped`). Si el backend falla, bloquea el despliegue del frontend para evitar que la UI quede huérfana.
-  - **Condicionalidad**: Corre **únicamente** si hay cambios en la carpeta `frontend/**`. Compila la SPA de React con Node 20, inyecta las variables de entorno de Firebase desde GitHub Secrets en caliente, y la publica en **Firebase Hosting** bajo tu canal de marca unificado.
+  - **Condicionalidad**: Corre **únicamente** si hay cambios en la carpeta `frontend/**`. Compila la SPA de React con Node 20+, inyecta las variables de entorno de Firebase desde GitHub Secrets en caliente, y la publica en **Firebase Hosting** bajo el canal de marca unificado.
+
+---
+
+## 🤖 6. Normalización Multicanal de Inteligencia Artificial (Battle of AIs)
+
+El pipeline de ingesta y visualización homologa el tráfico procedente de los distintos ecosistemas generativos bajo una clave canónica `battle_of_ais`:
+
+```mermaid
+graph TD
+    A["Fuentes de Tráfico (GA4 / Adobe / BigQuery)"] --> B["Normalizador Regex Centralizado"]
+    B --> C["ChatGPT (openai, chatgpt)"]
+    B --> D["Gemini (gemini, bard)"]
+    B --> E["Perplexity (perplexity)"]
+    B --> F["Copilot (copilot, bing ai)"]
+    B --> G["Claude (claude, anthropic)"]
+    C & D & E & F & G --> H["CalculationService.calculate_sniper_score"]
+    H --> I["Top 5 Landing Pages por Motor"]
+    H --> J["Desglose de Conversión (Purchases / Revenue / Leads)"]
+    I & J --> K["Frontend MotorPerformanceTable (Acordeón Interactivo)"]
+```
+
+### Características Técnicas:
+1. **Sniper Score Canónico**:
+   \[ S(c, d, p) = B(c) + \frac{30}{\log_{10}((d \times p) + 10)} \]
+   Garantiza puntuaciones representativas (sin fallbacks en 0) tanto para sesiones con conversiones como para sesiones de navegación cualificada.
+2. **Top Landing Pages**: Cada motor expone en `landing_pages` sus 5 URLs prioritarias de destino con volumen de sesiones, porcentaje de cuota sobre el motor y tiempo medio en página.
+3. **Desglose E-commerce**: Mapeo directo de `purchase` y `purchaseRevenue` para inquilinos con venta online, permitiendo cuantificar el retorno comercial exacto generado por cada IA.
+
+---
+
+## ⚡ 7. Compatibilidad React 19 y Renderizado de Canvas
+
+Durante la migración a React 19, se identificó un conflicto en el ciclo de vida de componentes que montan gráficos HTML5 `<canvas>` (Chart.js):
+* **Problema**: El modo estricto (`<StrictMode>`) desmonta y remonta componentes inmediatamente en desarrollo, provocando que librerías imperativas de canvas intenten manipular nodos desvinculados (`removeChildFromContainer` / `Failed to execute 'removeChild' on 'Node'`).
+* **Solución Arquitectónica**:
+  - En `main.tsx`, se gestiona la inicialización idempotente sobre `(rootElement as any)._reactRoot` para evitar errores de HMR duplicado.
+  - El renderizado de la aplicación se encapsula directamente en `<ErrorBoundary>` sin el doble montaje de StrictMode sobre componentes con canvas imperativo.
+
+---
+
+## 🧪 8. Trazabilidad de Pruebas y Política de Cero Mocks
+
+Siguiendo el estándar de gobernanza técnica de LLYC:
+1. **Cero Mocks**: Ninguna métrica de visualización es generada de forma sintética o hardcodeada. Los estados sin datos se manejan mediante estados vacíos o badges `N/A`.
+2. **Trazabilidad en Tests**: Toda validación de lógica de negocio o conectores de datos debe persistir en scripts `.py` dentro de `backend/tests/` ejecutables vía `pytest` (ej. `test_ai_engines_and_sniper.py`) y pruebas E2E de navegador en `frontend/tests/` (ej. `browser_check.cjs` con Playwright).

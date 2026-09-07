@@ -81,8 +81,10 @@ El dashboard o reporte generado por la herramienta organiza los cálculos y mét
    - Un desglose proporcional mostrando qué parte del volumen web se divide entre "IA Directa", "IA Inferida" y el "Resto Tráfico".
 
 4. **Rendimiento por Fuente (Battle of AIs):**
-   - Tabla comparativa de los distintos motores detectados (e.g., ChatGPT, Perplexity, Claude).
-   - Muestra visualmente quién tiene el mayor puntaje cualitativo y detalla para cada uno: sesiones, duración promedio y tasa de conversión.
+   - Tabla comparativa de los distintos motores detectados (`ChatGPT`, `Gemini`, `Perplexity`, `Copilot`, `Claude`).
+   - Muestra visualmente el puntaje cualitativo (**Sniper Score v3+**) con barras de progreso y detalla para cada motor: sesiones, duración promedio y tasa de conversión.
+   - **Acordeón Interactivo de Landing Pages (Feature 2.1):** Permite desplegar para cada motor las 5 URLs de destino prioritarias hacia las cuales dicho motor redirige a los usuarios, con sus respectivas sesiones, % de cuota dentro del motor y duración media.
+   - **Desglose de Conversión E-commerce (Feature 2.2):** Visualización explícita del impacto comercial en transacciones (`purchase_count`, `purchase_revenue` y `purchase_rate`) diferenciando compras finales de eventos secundarios.
 
 5. **Perfilado de Audiencia (Behavioral Clusters):**
    - Segmentación del tráfico aplicando metodología conductual multicapa. Categoriza a los usuarios en 4 perfiles principales y muestra su peso porcentual:
