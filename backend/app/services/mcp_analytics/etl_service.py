@@ -12,6 +12,7 @@ from app.services.mcp_analytics.peec_service import PeecService
 from app.services.mcp_analytics.ga_service import GAService
 from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
 from app.services.mcp_analytics.calculation_service import CalculationService
+from app.services.sanitizer_utils import sanitize_analytics_url
 from app.models.mcp_analytics.core_models import RunReportRequest
 
 logger = logging.getLogger(__name__)
@@ -401,8 +402,8 @@ class MCPETLService:
                             # For simplicity, since this is a backfill per day or range, we just assign date_to.
                             top = ai_known_df.groupby('landing_page').agg({'sessions': 'sum', 'userEngagementDuration': 'sum', 'cluster': lambda x: x.mode().iloc[0] if not x.mode().empty else 'casual'}).reset_index()
                             for _, r in top.iterrows():
-                                lp = str(r['landing_page'])
-                                lp_df = ai_known_df[ai_known_df['landing_page'] == lp]
+                                lp = sanitize_analytics_url(str(r['landing_page']))
+                                lp_df = ai_known_df[ai_known_df['landing_page'] == str(r['landing_page'])]
                                 platform_breakdown = lp_df.groupby('ai_platform')['sessions'].sum().to_dict()
                                 
                                 affinity_rows.append({

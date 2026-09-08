@@ -184,3 +184,21 @@ Durante la migración a React 19, se identificó un conflicto en el ciclo de vid
 Siguiendo el estándar de gobernanza técnica de LLYC:
 1. **Cero Mocks**: Ninguna métrica de visualización es generada de forma sintética o hardcodeada. Los estados sin datos se manejan mediante estados vacíos o badges `N/A`.
 2. **Trazabilidad en Tests**: Toda validación de lógica de negocio o conectores de datos debe persistir en scripts `.py` dentro de `backend/tests/` ejecutables vía `pytest` (ej. `test_ai_engines_and_sniper.py`) y pruebas E2E de navegador en `frontend/tests/` (ej. `browser_check.cjs` con Playwright).
+
+---
+
+## 🔒 9. Seguridad, Privacidad y Cumplimiento Regulatorio (GDPR, HIPAA, SOC 2, ISO 27001)
+
+La plataforma incorpora controles técnicos estrictos de ingeniería de seguridad y privacidad desde el diseño (*Privacy by Design*):
+
+1. **Soberanía y Residencia de Datos en la Unión Europea (GDPR Capítulo V)**:
+   - Los datasets y tablas de Google BigQuery se configuran con ubicación por defecto en la Unión Europea (`os.getenv("BQ_DATASET_LOCATION", "EU")`), garantizando el cumplimiento de la sentencia Schrems II y eliminando transferencias internacionales de datos hacia Estados Unidos.
+2. **Limitación del Plazo de Conservación (GDPR Art. 5(1)(e))**:
+   - Todas las tablas analíticas de hechos (`fact_traffic_evolution`, `fact_content_affinity`, etc.) cuentan con particionamiento diario por fecha y una política automática de caducidad de particiones de 730 días (`expiration_ms = 730 * 86,400,000`), purgando datos históricos más allá de los dos años acordados por contrato.
+3. **Gestión Criptográfica Fail-Closed en Producción (SOC 2 CC6.1 / ISO 27001 A.10)**:
+   - El módulo `EncryptionUtil` exige la inyección de `ENCRYPTION_KEY` o `SECRET_KEY` directamente desde Google Cloud Secret Manager cuando se ejecuta en producción (`K_SERVICE` o `ENVIRONMENT=production`). Se prohíbe de forma determinista la derivación de semillas predecibles en despliegues reales, abortando con `RuntimeError` en caso de omisión.
+4. **Sanitización Proactiva de URLs anti-PHI/PII (HIPAA & GDPR Art. 9)**:
+   - El módulo `sanitizer_utils.py` procesa todas las URLs de páginas de aterrizaje (`landingPagePlusQueryString`) antes de su persistencia en BigQuery o retorno en la API.
+   - Filtra y elimina parámetros de consulta con palabras clave sensibles de salud o personales (`patient`, `paciente`, `diagnostico`, `medico`, `email`, `token`, `dni`, `card`), preservando la estructura limpia de rutas y etiquetas benignas de marketing (`utm_*`, `lang`).
+5. **Pista de Auditoría Estructurada de Acceso a Inquilinos (SOC 2 CC7.2 / GDPR Art. 30)**:
+   - La función `log_tenant_audit_event` emite registros estructurados en formato JSON etiquetados con `[AUDIT_LOG]` en Google Cloud Logging cada vez que un usuario consulta o intenta acceder a los datos de un inquilino, garantizando trazabilidad y no repudio ante auditorías formales.

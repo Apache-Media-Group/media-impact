@@ -47,10 +47,10 @@ class BigQueryService:
                 self.client.get_dataset(dataset_ref)
                 logger.info(f"El Dataset '{self.dataset_id}' ya existe en BigQuery.")
             except Exception as e:
-                logger.info(f"El Dataset no pudo ser recuperado ({e}). Intentando crearlo...")
                 try:
                     dataset = bigquery.Dataset(dataset_ref)
-                    dataset.location = "US"  # O "EU" según corresponda
+                    # GDPR Compliance: Default to EU region (europe-west1) for data sovereignty
+                    dataset.location = os.getenv("BQ_DATASET_LOCATION", "EU")
                     self.client.create_dataset(dataset, timeout=30)
                     logger.info(f"✅ Dataset '{self.dataset_id}' creado con éxito.")
                 except Exception as create_e:
@@ -153,10 +153,12 @@ class BigQueryService:
                     if "Not found" in str(e) or "not found" in str(e) or "404" in str(e):
                         logger.info(f"Creando tabla analítica '{table_name}'...")
                         table = bigquery.Table(table_ref, schema=schema)
-                        # Configurar particionamiento por fecha para optimizar costos de consulta
+                        # Configurar particionamiento por fecha y retención de 730 días (GDPR Art. 5(1)(e) Storage Limitation)
+                        partition_expiry_days = int(os.getenv("BQ_PARTITION_EXPIRY_DAYS", "730"))
                         table.time_partitioning = bigquery.TimePartitioning(
                             type_=bigquery.TimePartitioningType.DAY,
-                            field="date"
+                            field="date",
+                            expiration_ms=partition_expiry_days * 24 * 60 * 60 * 1000
                         )
                         self.client.create_table(table, timeout=30)
                         logger.info(f"✅ Tabla '{table_name}' creada con éxito con particionamiento diario.")

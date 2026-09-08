@@ -1,5 +1,7 @@
 import os
+import json
 import logging
+from datetime import datetime, timezone
 from typing import Optional
 from fastapi import Security, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -79,11 +81,26 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
         )
 
 
+def log_tenant_audit_event(event_type: str, tenant_id: str, user_email: str, success: bool, reason: str = "") -> None:
+    """Emits structured JSON audit log for SOC 2 CC7.2 and GDPR Art. 30 compliance."""
+    audit_entry = {
+        "log_type": "AUDIT_TRAIL",
+        "event": event_type,
+        "tenant_id": tenant_id,
+        "user_email": user_email,
+        "success": success,
+        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "reason": reason
+    }
+    logger.info(f"[AUDIT_LOG] {json.dumps(audit_entry)}")
+
+
 async def verify_tenant_access(tenant_id: Optional[str], user_email: str, enforce_2fa: bool = False) -> None:
     """
     Verifica si un usuario autenticado por Firebase Auth tiene permisos para visualizar
     o consultar datos de un Tenant específico.
     Si no tiene acceso (o si se requiere 2FA y no se ha completado), lanza HTTPException 403 Forbidden.
+    Emite registros estructurados de auditoría para trazabilidad de acceso (SOC 2 / GDPR).
     """
     if not tenant_id:
         return  # Si no hay tenant_id, no restringimos por inquilino
@@ -93,10 +110,12 @@ async def verify_tenant_access(tenant_id: Optional[str], user_email: str, enforc
 
     # 1. Bypass para Superadmins de LLYC
     if user_email_clean.endswith("@llyc.global") or user_email_clean.endswith("@llyc.ai"):
+        log_tenant_audit_event("TENANT_ACCESS_GRANTED", tenant_id_clean, user_email_clean, True, reason="LLYC_SUPERADMIN")
         return
 
     # 2. Si el tenant solicitado es 'llyc', solo permitimos LLYC (ya cubierto por el bypass anterior)
     if tenant_id_clean == "llyc":
+        log_tenant_audit_event("TENANT_ACCESS_DENIED", tenant_id_clean, user_email_clean, False, reason="LLYC_TENANT_REQUIRES_CORPORATE_EMAIL")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Acceso denegado: Se requiere una cuenta corporativa de LLYC para acceder a este inquilino.",
@@ -126,6 +145,7 @@ async def verify_tenant_access(tenant_id: Optional[str], user_email: str, enforc
 
                 # Si no está autorizado
                 if not email_authorized and not domain_authorized:
+                    log_tenant_audit_event("TENANT_ACCESS_DENIED", tenant_id_clean, user_email_clean, False, reason="NOT_IN_WHITELIST")
                     logger.warning(f"❌ [AUTH ERROR] El usuario '{user_email_clean}' intentó acceder al tenant '{tenant_id_clean}' pero no está autorizado.")
                     raise HTTPException(
                         status_code=status.HTTP_403_FORBIDDEN,
@@ -136,15 +156,18 @@ async def verify_tenant_access(tenant_id: Optional[str], user_email: str, enforc
                 if enforce_2fa:
                     from app.services.otp_service import otp_service
                     if not otp_service.is_2fa_verified(tenant_id_clean, user_email_clean):
+                        log_tenant_audit_event("TENANT_ACCESS_CHALLENGE", tenant_id_clean, user_email_clean, False, reason="2FA_REQUIRED")
                         logger.warning(f"🔒 [2FA REQUIRED] El usuario '{user_email_clean}' está autorizado en whitelist pero aún no ha validado su 2FA para el tenant '{tenant_id_clean}'.")
                         raise HTTPException(
                             status_code=status.HTTP_403_FORBIDDEN,
                             detail="2FA_REQUIRED"
                         )
 
+                log_tenant_audit_event("TENANT_ACCESS_GRANTED", tenant_id_clean, user_email_clean, True, reason="WHITELIST_AUTHORIZED")
                 return
             else:
                 # Si el tenant no existe en Firestore, no autorizar por defecto
+                log_tenant_audit_event("TENANT_ACCESS_DENIED", tenant_id_clean, user_email_clean, False, reason="TENANT_NOT_FOUND")
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Cliente '{tenant_id_clean}' no registrado en la plataforma.",

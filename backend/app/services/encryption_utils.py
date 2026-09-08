@@ -25,12 +25,18 @@ class EncryptionUtil:
     def __init__(self, project_id: Optional[str] = None):
         self.project_id = project_id or os.getenv("GCP_PROJECT_ID", "default-project")
         
-        # Derive a 32-byte url-safe base64 key from configured secret
-        secret_seed = (
-            os.getenv("ENCRYPTION_KEY")
-            or os.getenv("SECRET_KEY")
-            or f"llyc-intel-key-{self.project_id}"
-        )
+        # Enforce strict fail-closed key management in production (SOC 2 CC6.1 / ISO 27001)
+        is_production = os.getenv("K_SERVICE") is not None or os.getenv("ENVIRONMENT") == "production"
+        configured_key = os.getenv("ENCRYPTION_KEY") or os.getenv("SECRET_KEY")
+        
+        if is_production and not configured_key:
+            raise RuntimeError(
+                "CRITICAL SECURITY COMPLIANCE ERROR (SOC 2 / ISO 27001): "
+                "ENCRYPTION_KEY or SECRET_KEY must be configured via GCP Secret Manager in production. "
+                "Predictable key derivation fallback is strictly prohibited."
+            )
+
+        secret_seed = configured_key or f"llyc-intel-key-{self.project_id}"
         
         key_digest = hashlib.sha256(secret_seed.encode("utf-8")).digest()
         self._fernet_key = base64.urlsafe_b64encode(key_digest)

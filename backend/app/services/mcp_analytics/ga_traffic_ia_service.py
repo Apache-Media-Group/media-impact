@@ -15,6 +15,7 @@ from google.analytics.data_v1beta.types import (
 )
 from google.api_core.exceptions import GoogleAPICallError
 from app.services.mcp_analytics.calculation_service import calculate_ratio, calculate_conversion_rate, CalculationService
+from app.services.sanitizer_utils import sanitize_analytics_url
 
 logger = logging.getLogger(__name__)
 
@@ -361,7 +362,7 @@ class GATrafficIAService:
                         dur_fmt = f"{lm:02d}:{ls:02d}" if lp_dur >= 60 else f"{int(lp_dur)}s"
                         share_val = round((lp_s / sess) * 100, 1) if sess > 0 else 0
                         lps.append({
-                            "url": str(lp_r['landing_page']),
+                            "url": sanitize_analytics_url(str(lp_r['landing_page'])),
                             "sessions": lp_s,
                             "share": f"{share_val}%",
                             "avg_duration": dur_fmt
