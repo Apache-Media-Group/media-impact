@@ -64,8 +64,9 @@ async def serve_media_impact_catchall(request: Request, path: str):
     raise HTTPException(status_code=404, detail="Media Impact Dashboard SPA index.html not found")
 
 @app.get("/")
+@app.get("/health")
 async def root():
-    return {"message": "LLYC Intelligence Dashboard API is running", "status": "ok"}
+    return {"message": "LLYC Intelligence Dashboard API is running", "status": "healthy", "version": "2.4.0"}
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8080))
