@@ -98,7 +98,13 @@ class TokenManager:
         self.project_id = project_id or os.getenv("GCP_PROJECT_ID") or settings.GCP_PROJECT_ID
         self._db = None
         self.collection = "connections"
-        self.enc_util = EncryptionUtil(self.project_id)
+        self._enc_util = None
+
+    @property
+    def enc_util(self) -> EncryptionUtil:
+        if self._enc_util is None:
+            self._enc_util = EncryptionUtil(self.project_id)
+        return self._enc_util
 
     @property
     def db(self):
@@ -273,7 +279,13 @@ class OAuthStateManager:
         self.project_id = project_id or os.getenv("GCP_PROJECT_ID")
         self._db = None
         self.collection = "oauth_states"
-        self.enc_util = EncryptionUtil(self.project_id)
+        self._enc_util = None
+
+    @property
+    def enc_util(self) -> EncryptionUtil:
+        if self._enc_util is None:
+            self._enc_util = EncryptionUtil(self.project_id)
+        return self._enc_util
 
     @property
     def db(self):

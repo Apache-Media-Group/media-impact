@@ -29,6 +29,25 @@ class EncryptionUtil:
         is_production = os.getenv("K_SERVICE") is not None or os.getenv("ENVIRONMENT") == "production"
         configured_key = os.getenv("ENCRYPTION_KEY") or os.getenv("SECRET_KEY")
         
+        # If in production and not provided via env, attempt to fetch from GCP Secret Manager
+        if is_production and not configured_key:
+            try:
+                from google.cloud import secretmanager
+                sm_client = secretmanager.SecretManagerServiceClient()
+                for secret_candidate in ["ENCRYPTION_KEY", "SECRET_KEY"]:
+                    try:
+                        secret_path = f"projects/{self.project_id}/secrets/{secret_candidate}/versions/latest"
+                        resp = sm_client.access_secret_version(request={"name": secret_path})
+                        candidate_val = resp.payload.data.decode("utf-8").strip()
+                        if candidate_val:
+                            configured_key = candidate_val
+                            logger.info(f"Loaded {secret_candidate} from GCP Secret Manager successfully.")
+                            break
+                    except Exception:
+                        continue
+            except Exception as sm_err:
+                logger.debug(f"Could not load encryption key from GCP Secret Manager: {sm_err}")
+
         if is_production and not configured_key:
             raise RuntimeError(
                 "CRITICAL SECURITY COMPLIANCE ERROR (SOC 2 / ISO 27001): "

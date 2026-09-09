@@ -50,6 +50,26 @@ def test_encryption_succeeds_in_production_with_secret_key(monkeypatch):
     assert util.decrypt(encrypted) == "test-secret-token"
 
 
+def test_encryption_loads_from_secret_manager_in_production(monkeypatch):
+    """
+    In production, if ENCRYPTION_KEY is missing from environment, EncryptionUtil
+    retrieves it from GCP Secret Manager and initializes safely.
+    """
+    monkeypatch.setenv("K_SERVICE", "llyc-intelligence-api")
+    monkeypatch.delenv("ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    
+    mock_sm_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.payload.data = b"secret-from-vault-key-32bytes-ok!"
+    mock_sm_client.access_secret_version.return_value = mock_resp
+    
+    with patch("google.cloud.secretmanager.SecretManagerServiceClient", return_value=mock_sm_client):
+        util = EncryptionUtil(project_id="prod-project")
+        assert util.decrypt(util.encrypt("hello")) == "hello"
+
+
+
 # --- 2. HIPAA & GDPR: PII/PHI URL Sanitization ---
 
 def test_url_sanitizer_strips_phi_query_params():

@@ -85,6 +85,8 @@ jobs:
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
             GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
+          secrets: |
+            ENCRYPTION_KEY=ENCRYPTION_KEY:latest
           flags: --allow-unauthenticated
 
   # 🎨 JOB 3: Desplegar Frontend (solo si hay cambios en frontend/ Y espera secuencialmente al backend si este corre)
