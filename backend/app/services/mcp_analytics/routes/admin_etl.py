@@ -3,7 +3,7 @@ import os
 import json
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, HTTPException, Depends, File, UploadFile, BackgroundTasks
 from pydantic import BaseModel, Field

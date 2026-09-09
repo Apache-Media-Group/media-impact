@@ -115,4 +115,17 @@ flowchart TD
 - **Sanitas:** Datos completos del 1 al 9 de septiembre recuperados directamente desde la Report Suite viva de Adobe (`vrs_sanita2_sanitasmayores`), con ~2,400 a 2,600 sesiones diarias y engagement scores calculados.
 - **Vidal & Vidal:** Brecha de los días 2 al 6 de septiembre cerrada con datos de GA4. Días 7, 8 y 9 recalculados limpiamente sin contaminación de Peec (221, 495 y 184 sesiones de IA, 100% proporcionales al volumen diario de tráfico web).
 
+---
+
+## 7. Diagnóstico y Corrección de Despliegue en Cloud Run (Revision 00028-b9r)
+
+- **Incidencia:** Fallo en el despliegue de Cloud Run con error `The user-provided container failed to start and listen on port 8080`.
+- **Inspección Forense de Logs Remotos:**
+  - Ejecutado `gcloud logging read "resource.type=\"cloud_run_revision\" AND resource.labels.revision_name=\"llyc-intelligence-api-00028-b9r\""`.
+  - Causa Raíz: `NameError: name 'Optional' is not defined` en `admin_etl.py:1160` dentro del modelo Pydantic `RunTenantOnDemandRequest`.
+- **Corrección:**
+  - Se añadió `Optional` a la importación de `typing` en `backend/app/services/mcp_analytics/routes/admin_etl.py`.
+  - Se creó la prueba unitaria `backend/tests/test_main_import.py` para verificar que la aplicación completa y todas sus subrutas se inicialicen sin excepciones de runtime.
+
+
 
