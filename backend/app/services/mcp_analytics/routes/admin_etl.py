@@ -15,6 +15,7 @@ from app.services.mcp_analytics.ga_service import GAService
 from app.services.mcp_analytics.adobe_service import AdobeAnalyticsService
 from app.services.mcp_analytics.gcs_service import GCSService
 from app.services.mcp_analytics.bigquery_service import BigQueryService
+from app.services.mcp_analytics.etl_orchestrator import ETLOrchestrator
 
 from app.services.mcp_analytics.routes.dependencies import (
     get_current_admin,
@@ -89,60 +90,35 @@ def update_deployment_status(tenant_id: str, status: str, step: str, message: st
 
 def create_or_update_tenant_scheduler(tenant_id: str):
     """
-    Crea o actualiza de forma programática un Job en Cloud Scheduler para el tenant
-    a fin de ejecutar la ETL diaria a las 03:00 UTC.
+    Registra y retrofitea al cliente en el Orquestador Centralizado de ETL.
+    Garantiza compatibilidad con los flujos de creación existentes sin depender
+    de llamadas frágiles o permisos restrictivos en la API remota de Cloud Scheduler.
     """
     try:
-        from google.cloud import scheduler_v1
-        from google.protobuf import duration_pb2
-        client = scheduler_v1.CloudSchedulerClient()
-        
-        project_id = os.getenv("GCP_PROJECT_ID") or "llyc-ai-first-core"
-        location_id = "europe-west1"
-        parent = f"projects/{project_id}/locations/{location_id}"
-        
-        job_id = f"mcp-analytics-{tenant_id}-etl-daily"
-        job_name = f"{parent}/jobs/{job_id}"
-        
-        # URI dinámica: usa variable de entorno de Cloud Run o dominio canónico de producción
-        api_base = os.getenv("API_BASE_URL") or os.getenv("CLOUD_RUN_SERVICE_URL") or "https://dashboard.llyc.global"
-        api_base = api_base.rstrip("/")
-        uri = f"{api_base}/api/v1/mcp-analytics/admin/etl/trigger"
-        
-        cron_secret = os.getenv("CRON_SECRET") or os.getenv("SECRET_KEY") or f"mcp-scheduler-{project_id}"
-        headers = {
-            "Content-Type": "application/json",
-            "X-CloudScheduler": "true",
-            "X-Cron-Secret": cron_secret
-        }
-        
-        # Construir el job
-        job = scheduler_v1.Job(
-            name=job_name,
-            description=f"Iniciador automático de la ETL diaria para el cliente MCP: {tenant_id}",
-            http_target=scheduler_v1.HttpTarget(
-                uri=uri,
-                http_method=scheduler_v1.HttpMethod.POST,
-                headers=headers,
-                body=f'{{"tenant_id": "{tenant_id}"}}'.encode("utf-8")
-            ),
-            schedule="0 3 * * *",
-            time_zone="UTC",
-            attempt_deadline=duration_pb2.Duration(seconds=540)
-        )
-        
-        try:
-            client.update_job(job=job)
-            logger.info(f"✅ Job de Cloud Scheduler '{job_id}' actualizado con éxito.")
-            update_deployment_status(tenant_id, "deploying", "Cloud Scheduler Configurado", f"Job '{job_id}' actualizado con éxito en Google Cloud.")
-        except Exception:
-            client.create_job(parent=parent, job=job)
-            logger.info(f"✅ Job de Cloud Scheduler '{job_id}' creado con éxito.")
-            update_deployment_status(tenant_id, "deploying", "Cloud Scheduler Configurado", f"Job '{job_id}' creado con éxito en Google Cloud.")
-            
+        clean_id = tenant_id.lower().strip()
+        tm = TokenManager()
+        if tm.db:
+            orchestrator = ETLOrchestrator()
+            doc_snap = tm.db.collection("tenants").document(clean_id).get()
+            tdata = doc_snap.to_dict() if doc_snap.exists else {"tenant_id": clean_id}
+            tdata["tenant_id"] = clean_id
+            orchestrator.normalize_and_retrofit_tenant(tdata, auto_persist=True)
+
+            logger.info(f"✅ Inquilino '{clean_id}' enrolado exitosamente en el Orquestador Centralizado de ETL.")
+            update_deployment_status(
+                clean_id,
+                "deploying",
+                "Orquestador Central Configurado",
+                "Inquilino integrado en el ciclo horario del Orquestador Centralizado de ETL."
+            )
     except Exception as e:
-        logger.warning(f"No se pudo automatizar Cloud Scheduler para '{tenant_id}': {e}")
-        update_deployment_status(tenant_id, "deploying", "Cloud Scheduler Omitido", f"No se pudo configurar Cloud Scheduler: {e}. Continuando...")
+        logger.warning(f"No se pudo enrolar '{tenant_id}' en el orquestador central: {e}")
+        update_deployment_status(
+            tenant_id,
+            "deploying",
+            "Orquestador Omitido",
+            f"No se pudo completar el enrolamiento en el orquestador: {e}"
+        )
 
 async def run_historical_backfill_task(tenant_id: str):
     """
@@ -1175,3 +1151,113 @@ async def configure_ga4_multi_property_admin(
     except Exception as e:
         logger.error(f"Error al configurar GA4 multi-propiedad: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Endpoints del Orquestador Centralizado de ETL ---
+
+class RunTenantOnDemandRequest(BaseModel):
+    historical_backfill: bool = False
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+
+
+@router.post("/admin/orchestrator/tick", response_model=Dict[str, Any])
+async def trigger_orchestrator_tick(
+    caller: str = Depends(get_admin_or_scheduler)
+):
+    """
+    Punto de entrada horario para Google Cloud Scheduler (o invocación manual de superadmin).
+    Ejecuta la orquestación centralizada de todos los inquilinos candidatos respetando
+    el presupuesto de tiempo de 20 minutos y el Lease Lock de 25 min.
+    """
+    try:
+        orchestrator = ETLOrchestrator()
+        res = await orchestrator.run_hourly_orchestration(triggered_by=caller)
+        return res
+    except Exception as e:
+        logger.error(f"Error en tick del orquestador: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/orchestrator/run-tenant/{tenant_id}", response_model=Dict[str, Any])
+async def run_tenant_orchestrator_on_demand(
+    tenant_id: str,
+    req: Optional[RunTenantOnDemandRequest] = None,
+    admin_email: str = Depends(get_current_admin)
+):
+    """
+    Disparo manual inmediato e individual del ETL para un cliente específico.
+    Protegido contra concurrencia a nivel de tenant.
+    """
+    try:
+        is_backfill = req.historical_backfill if req else False
+        custom_from = req.date_from if req else None
+        custom_to = req.date_to if req else None
+        orchestrator = ETLOrchestrator()
+        res = await orchestrator.run_tenant_on_demand(
+            tenant_id=tenant_id,
+            is_backfill=is_backfill,
+            admin_email=admin_email,
+            custom_date_from=custom_from,
+            custom_date_to=custom_to
+        )
+        return res
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except RuntimeError as re:
+        raise HTTPException(status_code=409, detail=str(re))
+    except Exception as e:
+        logger.error(f"Error en ejecución bajo demanda de '{tenant_id}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/admin/orchestrator/status", response_model=Dict[str, Any])
+async def get_orchestrator_status_admin(
+    admin_email: str = Depends(get_current_admin)
+):
+    """
+    Devuelve el estado en tiempo real del orquestador:
+    - Candado Lease Lock actual
+    - Último resumen de ciclo ejecutado
+    - Resumen de inquilinos (cadencias, estados de ejecución y fallos)
+    """
+    try:
+        orchestrator = ETLOrchestrator()
+        return orchestrator.get_orchestrator_status()
+    except Exception as e:
+        logger.error(f"Error al obtener estado del orquestador: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/orchestrator/resume-tenant/{tenant_id}", response_model=Dict[str, Any])
+async def resume_tenant_admin(
+    tenant_id: str,
+    admin_email: str = Depends(get_current_admin)
+):
+    """
+    Reactiva un cliente que haya sido suspendido automáticamente tras 3 fallos consecutivos.
+    """
+    try:
+        orchestrator = ETLOrchestrator()
+        return orchestrator.resume_suspended_tenant(tenant_id=tenant_id)
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        logger.error(f"Error al reactivar cliente '{tenant_id}': {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/admin/orchestrator/reset-lock", response_model=Dict[str, Any])
+async def reset_orchestrator_lock_admin(
+    admin_email: str = Depends(get_current_admin)
+):
+    """
+    Liberación de emergencia del Lease Lock para superadministradores.
+    """
+    try:
+        orchestrator = ETLOrchestrator()
+        return orchestrator.reset_lease_lock_emergency()
+    except Exception as e:
+        logger.error(f"Error al resetear lock del orquestador: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

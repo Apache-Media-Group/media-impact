@@ -15,6 +15,8 @@ from app.services.mcp_analytics.calculation_service import CalculationService
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=40.0, connect=10.0)
+
 class AdobeAnalyticsService(AnalyticsService):
     """
     Implementación avanzada de AnalyticsService para Adobe Analytics 2.0 API.

@@ -24,6 +24,13 @@ export interface TenantConfig {
     message?: string;
     updated_at?: string;
   };
+  sync_cadence?: 'daily' | 'every_6h' | 'hourly';
+  preferred_hour_utc?: number;
+  last_successful_execution?: string;
+  last_attempt_at?: string;
+  last_execution_status?: 'SUCCESS' | 'FAILED' | 'TIMEOUT' | 'ERROR_SUSPENDED';
+  consecutive_failures?: number;
+  is_running_now?: boolean;
 }
 
 export const API_BASE_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 

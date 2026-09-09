@@ -367,7 +367,6 @@ class MCPETLService:
                         merged_traffic[key]["other_ai_duration"] += total_duration_val
                         merged_traffic[key]["other_ai_conversions"] += conversions_val
 
-                from app.services.mcp_analytics.calculation_service import CalculationService
                 for k, stats in merged_traffic.items():
                     if stats["company_id"] == "ga4-account":
                         s_sess = stats.get("total_sessions", 0)
@@ -460,6 +459,7 @@ class MCPETLService:
                 logger.info(f"Iniciando ingesta analítica segmentada para {total_segments} variantes...")
                 
                 actual_rows = []
+                adobe_errors = []
                 for idx, seg in enumerate(segment_loops):
                     seg_id = seg["id"]
                     seg_name = seg["name"]
@@ -591,8 +591,11 @@ class MCPETLService:
                             
                     except Exception as ere:
                         logger.error(f"Error extrayendo/guardando datos de Adobe para el segmento '{seg['name']}': {ere}")
-                        # Continuar con el siguiente segmento para no detener toda la ETL de los demás segmentos
+                        adobe_errors.append(f"{seg['name']}: {ere}")
                         continue
+                    
+                if len(traffic_rows) == 0 and adobe_errors:
+                    raise Exception(f"Adobe Analytics no pudo importar filas: {'; '.join(adobe_errors)}")
                     
                 results["adobe"] = f"success ({len(traffic_rows)} filas reales importadas para {len(segment_loops)} segmentos)"
             except Exception as e:
@@ -630,80 +633,13 @@ class MCPETLService:
                     peec_property_id = peec_props[0].name if peec_props else "properties/peec-default"
                     logger.warning(f"⚠️ No se encontró proyecto específico para {self.tenant_id}, usando default: {peec_property_id}")
                 
-                req = RunReportRequest(
-                    property_id=peec_property_id,
-                    date_ranges=[{"start_date": date_from, "end_date": date_to}],
-                    dimensions=["date"],
-                    metrics=["ai_referred", "ai_inferred", "sentiment_score"]
-                )
-                res = await peec_service.run_report(req)
-                
-                for r in res.rows:
-                    date_val = self._clean_date_format(r.get("date"))
-                    # Asumiremos la propiedad default de GA4 para el cruce. Si no existe, la creamos
-                    key = f"{ga4_property_id if 'ga4_property_id' in locals() else 'properties/default'}_all-users_{date_val}"
-                    if key not in merged_traffic:
-                        merged_traffic[key] = {
-                            "tenant_id": self.tenant_id,
-                            "date": date_val,
-                            "source": "ai-engines",
-                            "medium": "organic-ai",
-                            "total_sessions": 0,
-                            "ai_referred_sessions": 0,
-                            "ai_inferred_sessions": 0,
-                            "chatgpt_sessions": 0,
-                            "chatgpt_conversions": 0.0,
-                            "gemini_sessions": 0,
-                            "gemini_duration": 0.0,
-                            "gemini_conversions": 0.0,
-                            "perplexity_sessions": 0,
-                            "perplexity_duration": 0.0,
-                            "perplexity_conversions": 0.0,
-                            "claude_sessions": 0,
-                            "claude_duration": 0.0,
-                            "claude_conversions": 0.0,
-                            "copilot_sessions": 0,
-                            "copilot_duration": 0.0,
-                            "copilot_conversions": 0.0,
-                            "other_ai_sessions": 0,
-                            "other_ai_duration": 0.0,
-                            "other_ai_conversions": 0.0,
-                            "researcher_sessions": 0,
-                            "quick_answer_sessions": 0,
-                            "transactional_sessions": 0,
-                            "casual_sessions": 0,
-                            "engagement_score": float(r.get("sentiment_score", 0)),
-                            "company_id": "peec-account",
-                            "property_id": "properties/peec-default",
-                            "segment_id": "all-users"
-                        }
-                    
-                    peec_inferred = int(float(r.get("ai_inferred", 0)))
-                    merged_traffic[key]["ai_inferred_sessions"] += peec_inferred
-                    
-                    if peec_inferred > 0:
-                        r_sess = merged_traffic[key]["researcher_sessions"]
-                        q_sess = merged_traffic[key]["quick_answer_sessions"]
-                        t_sess = merged_traffic[key]["transactional_sessions"]
-                        c_sess = merged_traffic[key]["casual_sessions"]
-                        tot_c = r_sess + q_sess + t_sess + c_sess
-                        if tot_c > 0:
-                            merged_traffic[key]["researcher_sessions"] += round(peec_inferred * (r_sess / tot_c))
-                            merged_traffic[key]["quick_answer_sessions"] += round(peec_inferred * (q_sess / tot_c))
-                            merged_traffic[key]["transactional_sessions"] += round(peec_inferred * (t_sess / tot_c))
-                            merged_traffic[key]["casual_sessions"] += round(peec_inferred * (c_sess / tot_c))
-                        else:
-                            merged_traffic[key]["casual_sessions"] += peec_inferred
-                    if merged_traffic[key]["engagement_score"] == 0:
-                        merged_traffic[key]["engagement_score"] = float(r.get("sentiment_score", 0))
-
-                # Extraer dominios (competidores) desde Peec.ai
+                # Extraer dominios (competidores y marca propia) desde Peec.ai para fact_ai_visibility
                 try:
                     domains_data = await peec_service.fetch_domains(peec_property_id, start_date=date_from, end_date=date_to)
                     for item in domains_data:
                         visibility_rows.append({
                             "tenant_id": self.tenant_id,
-                            "date": self._clean_date_format(item.get("date", date_val)),
+                            "date": self._clean_date_format(item.get("date", date_to)),
                             "domain": item.get("domain", "(not set)"),
                             "engine": item.get("engine", "Global AI"),
                             "visibility_score": float(item.get("visibility_score", 0) or item.get("score", 0)),
@@ -717,26 +653,25 @@ class MCPETLService:
                     logger.error(f"Error extrayendo dominios de Peec.ai: {e}")
 
                 # Extraer temas desde Peec.ai
+                peec_topics_rows = []
                 try:
                     topics_data = await peec_service.fetch_topics(peec_property_id, start_date=date_from, end_date=date_to)
-                    peec_topics_rows = []
                     for item in topics_data:
                         peec_topics_rows.append({
                             "tenant_id": self.tenant_id,
-                            "date": self._clean_date_format(item.get("date")),
-                            "topic": item.get("topic") or item.get("query") or "(not set)",
-                            "priority_score": int(float(item.get("priority_score", 0) or item.get("score", 0))),
-                            "recommendation_strategy": item.get("recommendation_strategy") or "Digital / SEO",
-                            "execution_steps": item.get("execution_steps", "")
+                            "date": date_to, # Fecha de corte
+                            "topic": item.get("topic") or item.get("citation") or "(not set)",
+                            "priority_score": int(item.get("priority", 2)),
+                            "recommendation_strategy": item.get("strategy", "LLM Visibility Optimization"),
+                            "execution_steps": item.get("description", "Optimizar contenido para motores de IA")
                         })
                     if peec_topics_rows:
                         logger.info(f"📤 Cargando {len(peec_topics_rows)} temas desde Peec.ai en BigQuery...")
-                        self.bq_service.delete_existing_records("dim_content_recommendations", self.tenant_id, date_from, date_to)
                         self.bq_service.insert_rows("dim_content_recommendations", peec_topics_rows)
                 except Exception as e:
                     logger.error(f"Error extrayendo temas de Peec.ai: {e}")
 
-                results["peec"] = f"success ({len(res.rows)} filas de tráfico, {len(visibility_rows)} dominios)"
+                results["peec"] = f"success ({len(visibility_rows)} dominios, {len(peec_topics_rows)} temas)"
             except Exception as e:
                 logger.error(f"Error en extracción de Peec.ai: {e}")
                 results["peec"] = f"error: {str(e)}"
@@ -744,7 +679,7 @@ class MCPETLService:
         # Finalizamos el bloque de Tráfico cargando TODO consolidado a BigQuery
         traffic_rows = list(merged_traffic.values())
         if traffic_rows:
-            logger.info(f"📤 [ETL ESCALONADA] Cargando {len(traffic_rows)} filas consolidadas de Tráfico (GA4 + Peec) en BigQuery...")
+            logger.info(f"📤 [ETL ESCALONADA] Cargando {len(traffic_rows)} filas consolidadas de Tráfico en BigQuery...")
             self.bq_service.delete_existing_records("fact_traffic_evolution", self.tenant_id, date_from, date_to, segment_id="all-users")
             self.bq_service.insert_rows("fact_traffic_evolution", traffic_rows)
 
