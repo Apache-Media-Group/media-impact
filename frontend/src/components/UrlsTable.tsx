@@ -15,6 +15,15 @@ interface UrlsTableProps {
   source?: string;
 }
 
+const ENGINE_LABELS: Record<string, string> = {
+  chatgpt: 'ChatGPT',
+  gemini: 'Gemini',
+  perplexity: 'Perplexity',
+  claude: 'Claude',
+  copilot: 'Copilot',
+  other_ai: 'Other AI',
+};
+
 export const UrlsTable: React.FC<UrlsTableProps> = ({ title, rows, source }) => {
   return (
     <div className="bg-white rounded-xl overflow-hidden border border-dashboard-border shadow-sm">
@@ -65,18 +74,33 @@ export const UrlsTable: React.FC<UrlsTableProps> = ({ title, rows, source }) => 
                   </span>
                 </td>
                 <td className="px-5 py-2.5">
-                  {r.platform_breakdown && Object.keys(r.platform_breakdown).length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {Object.entries(r.platform_breakdown).map(([engine, count]) => (
-                        <span key={engine} className="text-[9px] px-1.5 py-0.5 bg-dashboard-bg border border-dashboard-border rounded text-mid font-medium flex items-center gap-1" title={`${engine}: ${count} sesiones`}>
-                          <span className="font-bold text-navy capitalize">{engine}</span>
-                          <span className="text-[8px] bg-white/50 px-1 rounded">{count}</span>
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-mid/50 italic">Sin desagregar</span>
-                  )}
+                  {(() => {
+                    const activeEntries = r.platform_breakdown
+                      ? Object.entries(r.platform_breakdown).filter(([_, count]) => Number(count) > 0)
+                      : [];
+
+                    if (activeEntries.length === 0) {
+                      return <span className="text-[10px] text-mid/50 italic">0 sesiones IA</span>;
+                    }
+
+                    return (
+                      <div className="flex flex-wrap gap-1">
+                        {activeEntries.map(([engine, count]) => {
+                          const formattedEngine = ENGINE_LABELS[engine.toLowerCase()] || engine.replace('_', ' ');
+                          return (
+                            <span
+                              key={engine}
+                              className="text-[9px] px-1.5 py-0.5 bg-dashboard-bg border border-dashboard-border rounded text-mid font-medium flex items-center gap-1"
+                              title={`${formattedEngine}: ${count} sesiones`}
+                            >
+                              <span className="font-bold text-navy capitalize">{formattedEngine}</span>
+                              <span className="text-[8px] bg-white px-1 rounded font-bold text-navy border border-dashboard-border/50">{count}</span>
+                            </span>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </td>
               </tr>
             )) : (

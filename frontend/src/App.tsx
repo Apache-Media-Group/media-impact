@@ -4,7 +4,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 import { WelcomeScreen } from './components/WelcomeScreen';
 import { ClientLoginScreen } from './components/ClientLoginScreen';
-import { Header, FilterBar } from './components/DashboardLayout';
+import { Header } from './components/DashboardLayout';
+import { FilterSidebar } from './components/FilterSidebar';
 import { AdminPanel } from './components/AdminPanel';
 import { MethodologyModal } from './components/methodology/MethodologyModal';
 import { AnalyticsDashboardView } from './components/dashboard/AnalyticsDashboardView';
@@ -24,6 +25,12 @@ const App: React.FC = () => {
   const dashboardRef = useRef<HTMLDivElement>(null);
   const [isAdminView, setIsAdminView] = useState(false);
   const [isMethodologyOpen, setIsMethodologyOpen] = useState(false);
+  const [isFiltersOpen, setIsFiltersOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
   
   // Estados de autenticación seguros y verificados por Firebase SDK
   const [adminUserEmail, setAdminUserEmail] = useState<string | null>(null);
@@ -741,36 +748,45 @@ const App: React.FC = () => {
         exporting={exporting}
         lastUpdated={lastUpdated} 
         tenant={tenant}
-      />
-      <FilterBar
-        state={state}
-        updateState={updateState}
-        onApply={handleApplyFilters}
-        connections={connections}
-        accounts={accounts}
-        properties={properties}
-        segments={segments}
-        onConnectionChange={handleConnectionChange}
-        onAccountChange={(accId) => handleAccountChange(state.connection_id, accId)}
+        isFiltersOpen={isFiltersOpen}
+        onToggleFilters={() => setIsFiltersOpen(prev => !prev)}
       />
 
+      <div className="flex-1 flex flex-row relative min-h-0">
+        <FilterSidebar
+          isOpen={isFiltersOpen}
+          onToggle={() => setIsFiltersOpen(prev => !prev)}
+          state={state}
+          updateState={updateState}
+          onApply={handleApplyFilters}
+          loading={loading}
+          connections={connections}
+          accounts={accounts}
+          properties={properties}
+          segments={segments}
+          onConnectionChange={handleConnectionChange}
+          onAccountChange={(accId) => handleAccountChange(state.connection_id, accId)}
+        />
 
-      <AnalyticsDashboardView
-        data={data}
-        loading={loading}
-        state={state}
-        tenant={tenant}
-        trafficSource={trafficSource}
-        aiSource={aiSource}
-        lineData={lineData}
-        top10Domains={top10Domains}
-        motorRows={motorRows}
-        topicsRows={topicsRows}
-        totalUniqueDomains={totalUniqueDomains}
-        exporting={exporting}
-        dashboardRef={dashboardRef}
-        onOpenMethodology={() => setIsMethodologyOpen(true)}
-      />
+        <div className="flex-1 min-w-0 overflow-y-auto">
+          <AnalyticsDashboardView
+            data={data}
+            loading={loading}
+            state={state}
+            tenant={tenant}
+            trafficSource={trafficSource}
+            aiSource={aiSource}
+            lineData={lineData}
+            top10Domains={top10Domains}
+            motorRows={motorRows}
+            topicsRows={topicsRows}
+            totalUniqueDomains={totalUniqueDomains}
+            exporting={exporting}
+            dashboardRef={dashboardRef}
+            onOpenMethodology={() => setIsMethodologyOpen(true)}
+          />
+        </div>
+      </div>
 
       <MethodologyModal
         isOpen={isMethodologyOpen}

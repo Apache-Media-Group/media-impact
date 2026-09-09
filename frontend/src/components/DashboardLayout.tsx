@@ -15,18 +15,48 @@ interface HeaderProps {
     logo_url: string;
     primary_color: string;
   };
+  isFiltersOpen?: boolean;
+  onToggleFilters?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ onRefresh, onExport, onFileUpload, loading, exporting, lastUpdated, tenant }) => (
+export const Header: React.FC<HeaderProps> = ({ 
+  onRefresh, 
+  onExport, 
+  onFileUpload, 
+  loading, 
+  exporting, 
+  lastUpdated, 
+  tenant,
+  isFiltersOpen,
+  onToggleFilters 
+}) => (
   <header className="h-16 bg-white border-b border-dashboard-border flex items-center justify-between px-4 sm:px-8 sticky top-0 z-[50] pt-[env(safe-area-inset-top,0px)]">
-    <div className="flex items-center gap-4 sm:gap-6">
+    <div className="flex items-center gap-3 sm:gap-5">
+      {onToggleFilters && (
+        <button
+          type="button"
+          onClick={onToggleFilters}
+          aria-label={isFiltersOpen ? "Ocultar panel de filtros" : "Mostrar panel de filtros"}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+            isFiltersOpen 
+              ? 'bg-red text-white border-red shadow-xs' 
+              : 'bg-dashboard-bg text-navy border-dashboard-border hover:bg-navy-light'
+          }`}
+          title={isFiltersOpen ? "Ocultar panel lateral de filtros" : "Mostrar panel lateral de filtros"}
+        >
+          <Filter className={`w-3.5 h-3.5 ${isFiltersOpen ? 'text-white' : 'text-red'}`} />
+          <span className="text-[11px] font-black uppercase tracking-wider hidden sm:inline">
+            Filtros
+          </span>
+        </button>
+      )}
       {tenant?.logo_url ? (
         <img src={tenant.logo_url} alt={tenant.tenant_name} className="h-8 object-contain max-w-[120px]" />
       ) : (
         <div className="text-red font-black text-xl tracking-tighter">{tenant?.tenant_name || 'LLYC'}</div>
       )}
       <div className="h-4 w-[1px] bg-dashboard-border hidden sm:block"></div>
-      <div className="text-[11px] font-black uppercase tracking-widest text-navy hidden sm:block">
+      <div className="text-[11px] font-black uppercase tracking-widest text-navy hidden md:block">
         Intelligence Dashboard <span className="text-mid font-medium">2026</span>
       </div>
     </div>
