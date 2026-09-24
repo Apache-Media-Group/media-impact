@@ -457,8 +457,24 @@ async def get_tenant_secret_options_admin(
             current_selection["property_id"] = parsed.get("property_id")
             
         elif secret_type_clean == "brandlight-key":
-            pass # No options
-            
+            try:
+                parsed = json.loads(secret_val)
+                brand_name = parsed.get("brandlight_brand_name") or parsed.get("brand_name")
+            except Exception:
+                parsed = {"api_key": secret_val}
+                brand_name = None
+
+            try:
+                from app.services.mcp_analytics.brandlight_service import BrandlightService
+                service = BrandlightService(credentials=parsed)
+                accounts = await service.list_accounts()
+                options["brands"] = [{"id": acc.account_id, "name": acc.display_name} for acc in accounts]
+            except Exception as e:
+                logger.warning(f"No se pudieron consultar marcas en vivo de Brandlight: {e}")
+                options["brands"] = []
+
+            current_selection["brandlight_brand_name"] = brand_name
+
         else:
             raise HTTPException(status_code=400, detail="Este tipo de secreto no soporta opciones dinámicas.")
 
@@ -481,7 +497,7 @@ async def patch_tenant_secret_admin(
     user_email: str = Depends(get_current_admin)
 ):
     """
-    Actualiza propiedades parciales de un secreto (ej. cambiar project_id) preservando la API Key original.
+    Actualiza propiedades parciales de un secreto (ej. cambiar brandlight_brand_name) preservando la API Key original.
     """
     try:
         sms = SecretManagerService()
@@ -495,7 +511,7 @@ async def patch_tenant_secret_admin(
         try:
             parsed_secret = json.loads(secret_val)
         except Exception:
-            if secret_type_clean == "peec-key":
+            if secret_type_clean in ["peec-key", "brandlight-key"]:
                 parsed_secret = {"api_key": secret_val}
             else:
                 raise HTTPException(status_code=400, detail="El formato actual del secreto no soporta actualizaciones parciales.")
@@ -680,6 +696,24 @@ async def validate_peec_projects_admin(
     except Exception as e:
         logger.error(f"Error al validar credenciales de Peec en admin: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/admin/tenants/validate-brandlight-brands", response_model=Dict[str, Any])
+async def validate_brandlight_brands_admin(
+    api_key: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Retorna la lista de Marcas autorizadas disponibles para una llave de Brandlight.
+    """
+    try:
+        from app.services.mcp_analytics.brandlight_service import BrandlightService
+        svc = BrandlightService(credentials={"api_key": api_key.strip()})
+        accounts = await svc.list_accounts()
+        brands = [{"id": acc.account_id, "name": acc.display_name} for acc in accounts]
+        return {"status": "success", "brands": brands}
+    except Exception as e:
+        logger.warning(f"Error al validar marcas de Brandlight: {e}")
+        return {"status": "partial", "brands": [], "message": str(e)}
 
 @router.get("/admin/tenants/validate-adobe-properties", response_model=Dict[str, Any])
 async def validate_adobe_properties_admin(

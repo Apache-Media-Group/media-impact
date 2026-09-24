@@ -48,6 +48,11 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
   const [validatingPeec, setValidatingPeec] = useState(false);
   const [selectedPeecProject, setSelectedPeecProject] = useState('');
 
+  // Brandlight states
+  const [brandlightBrandName, setBrandlightBrandName] = useState('');
+  const [brandlightBrandsList, setBrandlightBrandsList] = useState<any[]>([]);
+  const [validatingBrandlight, setValidatingBrandlight] = useState(false);
+
   // GA4 Global Vault states
   const [selectedGa4Connection, setSelectedGa4Connection] = useState('');
   const [ga4PropertiesList, setGa4PropertiesList] = useState<any[]>([]);
@@ -136,6 +141,9 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
 
       setPeecProjectsList([]);
       setSelectedPeecProject('');
+
+      setBrandlightBrandName('');
+      setBrandlightBrandsList([]);
 
       setRedeploying(false);
       setSaving(false);
@@ -307,6 +315,34 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     }
   };
 
+  const handleValidateBrandlightCredentials = async () => {
+    if (!secretValue) {
+      alert('Por favor ingresa el API Key de Brandlight para validar.');
+      return;
+    }
+    try {
+      setValidatingBrandlight(true);
+      const res = await secureFetch(
+        `/api/v1/mcp-analytics/admin/tenants/validate-brandlight-brands?api_key=${encodeURIComponent(
+          secretValue.trim()
+        )}`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setBrandlightBrandsList(data.brands || []);
+        if (data.brands?.length) setBrandlightBrandName(data.brands[0].name);
+        alert(`API Key de Brandlight validada. Se encontraron ${data.brands?.length || 0} marcas.`);
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || 'Fallo en la autenticación con Brandlight API.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al conectar con el servicio de validación de Brandlight');
+    } finally {
+      setValidatingBrandlight(false);
+    }
+  };
+
   const handleEditConfig = async () => {
     if (!tenantId) return;
     try {
@@ -322,6 +358,9 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
         if (secretType === 'peec-key') {
           setPeecProjectsList(opts.projects || []);
           if (cur.project_id) setSelectedPeecProject(cur.project_id);
+        } else if (secretType === 'brandlight-key') {
+          setBrandlightBrandsList(opts.brands || []);
+          if (cur.brandlight_brand_name) setBrandlightBrandName(cur.brandlight_brand_name);
         } else if (secretType === 'adobe-creds') {
           setAdobeCompaniesList(opts.companies || []);
           setAdobeSuitesList(opts.suites || []);
@@ -404,6 +443,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
       if (isEditMode) {
         const updates: Record<string, any> = {};
         if (secretType === 'peec-key') updates.project_id = selectedPeecProject;
+        else if (secretType === 'brandlight-key') updates.brandlight_brand_name = brandlightBrandName;
         else if (secretType === 'adobe-creds') {
           updates.company_id = selectedAdobeCompany;
           updates.property_id = selectedAdobeSuite;
@@ -481,6 +521,20 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
           secret_type: secretType,
           secret_value: secretValue.trim(),
           project_id: selectedPeecProject,
+        };
+      } else if (secretType === 'brandlight-key') {
+        let formattedVal = secretValue.trim();
+        try {
+          JSON.parse(secretValue);
+        } catch {
+          formattedVal = JSON.stringify({
+            api_key: secretValue.trim(),
+            brandlight_brand_name: brandlightBrandName.trim()
+          });
+        }
+        payload = {
+          secret_type: secretType,
+          secret_value: formattedVal,
         };
       } else if (secretType === 'ga4-oauth') {
         if (!selectedGa4OauthProperty) {
@@ -632,6 +686,11 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
             <BrandlightCredentialForm
               secretValue={secretValue}
               setSecretValue={setSecretValue}
+              brandlightBrandName={brandlightBrandName}
+              setBrandlightBrandName={setBrandlightBrandName}
+              brandlightBrandsList={brandlightBrandsList}
+              validating={validatingBrandlight}
+              onValidate={handleValidateBrandlightCredentials}
               isEditMode={isEditMode}
             />
           )}

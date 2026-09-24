@@ -698,6 +698,8 @@ class MCPETLService:
                 parsed_creds = self._parse_credentials("brandlight-key", brandlight_creds_raw)
                 if isinstance(parsed_creds, dict):
                     parsed_creds["tenant_id"] = self.tenant_id
+                    if not parsed_creds.get("brandlight_brand_name"):
+                        parsed_creds["brandlight_brand_name"] = credentials.get("brandlight_brand_name") or credentials.get("brandlight_id")
                 brandlight_service = BrandlightService(credentials=parsed_creds)
                 req = RunReportRequest(
                     property_id="properties/ES",

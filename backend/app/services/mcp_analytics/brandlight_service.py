@@ -33,6 +33,12 @@ class BrandlightService(AnalyticsService):
             raise ValueError("API Key o Token requerido para la conexión con Brandlight.")
             
         self.tenant_id = credentials.get("tenant_id") or "default-brand"
+        self.brand_name = (
+            credentials.get("brandlight_brand_name") or
+            credentials.get("brandlight_id") or
+            credentials.get("brand_name") or
+            self.tenant_id
+        )
         self.base_url = "https://bi.brandlight.ai/v1"
         self.headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -67,16 +73,15 @@ class BrandlightService(AnalyticsService):
 
     async def _request(self, method: str, endpoint: str, params: Optional[Dict[str, Any]] = None, data: Optional[Dict[str, Any]] = None) -> Any:
         """
-        Realiza una petición asíncrona hacia la API de Brandlight con soporte para Exponential Backoff en caso de 429
-        y timeouts estrictos para prevenir bloqueos indefinidos.
+        Realiza una petición asíncrona hacia la API de Brandlight con soporte para Exponential Backoff en caso de 429,
+        manejo amigable de 503 (Servicio no disponible) y timeouts estrictos.
         """
-        # Delay de seguridad preventivo inicial
-        await asyncio.sleep(1.0)
+        await asyncio.sleep(0.5)
         
         url = f"{self.base_url}{endpoint}"
-        max_retries = 3
-        base_delay = 2.0
-        client_timeout = aiohttp.ClientTimeout(total=40.0, connect=10.0)
+        max_retries = 2
+        base_delay = 1.5
+        client_timeout = aiohttp.ClientTimeout(total=30.0, connect=10.0)
         
         async with aiohttp.ClientSession(timeout=client_timeout) as session:
             for attempt in range(max_retries):
@@ -90,25 +95,39 @@ class BrandlightService(AnalyticsService):
                         elif response.status == 401:
                             raise ValueError("No autorizado: Clave API de Brandlight inválida o vencida.")
                             
+                        elif response.status in [500, 502, 503, 504]:
+                            err_body = await response.text()
+                            friendly_msg = "Servicio externo de Brandlight BI no disponible temporalmente (HTTP 503)."
+                            try:
+                                json_err = json.loads(err_body)
+                                api_msg = json_err.get("error", {}).get("message") or json_err.get("message")
+                                if api_msg:
+                                    friendly_msg = f"Servicio externo de Brandlight BI no disponible temporalmente: {api_msg} (HTTP {response.status})"
+                            except Exception:
+                                pass
+                            raise ValueError(friendly_msg)
+
                         elif response.status == 429:
                             import random
-                            delay = min(15.0, (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5))
+                            delay = min(10.0, (base_delay * (2 ** attempt)) + random.uniform(0.5, 1.5))
                             logger.warning(f"⚠️ Brandlight Rate Limit (429) detectado en intento {attempt+1}/{max_retries}. Durmiendo {delay:.2f}s antes de reintentar...")
                             await asyncio.sleep(delay)
                             continue
                             
                         else:
-                            response.raise_for_status()
+                            err_body = await response.text()
+                            raise ValueError(f"Brandlight API Error ({response.status}): {err_body[:200]}")
+
                 except Exception as e:
-                    if "401" in str(e) or isinstance(e, ValueError):
+                    if isinstance(e, ValueError):
                         raise e
                     if attempt == max_retries - 1:
                         logger.error(f"Error final al conectar con la API de Brandlight en {endpoint}: {e}")
                         raise e
-                    delay_err = min(15.0, base_delay * (2 ** attempt))
+                    delay_err = min(10.0, base_delay * (2 ** attempt))
                     await asyncio.sleep(delay_err)
                     
-            raise Exception("Brandlight: Límite de reintentos agotado tras recibir continuos códigos 429 (Too Many Requests).")
+            raise ValueError("Servicio de Brandlight BI no disponible temporalmente (límite de reintentos agotado).")
 
     async def list_accounts(self) -> List[GAAccount]:
         """
@@ -197,17 +216,20 @@ class BrandlightService(AnalyticsService):
         """
         Ejecuta consultas tabulares mapeando peticiones de métricas a los reportes de Visibilidad y SoV de Brandlight.
         """
-        brand_name = self.tenant_id
+        brand_name = self.brand_name
         try:
             brands = await self.list_accounts()
             brand_ids = [b.account_id for b in brands]
             if brand_name not in brand_ids and brands:
-                # Si el tenant_id no coincide con ninguna marca registrada, usar la primera disponible (ej. 'Sanitas Mayores')
-                brand_name = brands[0].account_id
-                logger.info(f"Brandlight: El tenant '{self.tenant_id}' no coincide con marcas registradas {brand_ids}. Usando '{brand_name}' automáticamente.")
+                # Si el brand_name configurado no coincide con ninguna marca registrada del token, usar la primera disponible
+                first_brand = brands[0].account_id
+                logger.info(f"Brandlight: La marca '{brand_name}' no está registrada para este token ({brand_ids}). Usando '{first_brand}' dinámicamente.")
+                brand_name = first_brand
             else:
                 logger.info(f"Brandlight: Usando marca '{brand_name}'")
         except Exception as e:
+            if "503" in str(e) or "temporalmente" in str(e).lower():
+                raise e
             logger.warning(f"Error al verificar marca de Brandlight: {e}")
                 
         location = request.property_id.split("/")[-1] if request.property_id else "ES" # ej: ES, MX
@@ -293,13 +315,15 @@ class BrandlightService(AnalyticsService):
         """
         Extrae las oportunidades de contenido (topics) desde Brandlight usando el nuevo endpoint.
         """
-        brand_name = self.tenant_id
+        brand_name = self.brand_name
         try:
             brands = await self.list_accounts()
             brand_ids = [b.account_id for b in brands]
             if brand_name not in brand_ids and brands:
                 brand_name = brands[0].account_id
         except Exception as e:
+            if "503" in str(e) or "temporalmente" in str(e).lower():
+                raise e
             logger.warning(f"Error al verificar marca de Brandlight para topics: {e}")
 
         topics = []
