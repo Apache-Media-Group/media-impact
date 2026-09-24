@@ -207,20 +207,21 @@ class BrandlightService(AnalyticsService):
         Ejecuta consultas tabulares mapeando peticiones de métricas a los reportes de Visibilidad y SoV de Brandlight.
         """
         brand_name = self.brand_name
-        try:
-            brands = await self.list_accounts()
-            brand_ids = [b.account_id for b in brands]
-            if brand_name not in brand_ids and brands:
-                # Si el brand_name configurado no coincide con ninguna marca registrada del token, usar la primera disponible
-                first_brand = brands[0].account_id
-                logger.info(f"Brandlight: La marca '{brand_name}' no está registrada para este token ({brand_ids}). Usando '{first_brand}' dinámicamente.")
-                brand_name = first_brand
-            else:
-                logger.info(f"Brandlight: Usando marca '{brand_name}'")
-        except Exception as e:
-            if "503" in str(e) or "temporalmente" in str(e).lower():
-                raise e
-            logger.warning(f"Error al verificar marca de Brandlight: {e}")
+        # Solo verificar la lista de marcas en vivo si no tenemos una marca configurada explícitamente
+        if not brand_name or brand_name == self.tenant_id:
+            try:
+                brands = await self.list_accounts()
+                brand_ids = [b.account_id for b in brands]
+                if brand_name not in brand_ids and brands:
+                    first_brand = brands[0].account_id
+                    logger.info(f"Brandlight: La marca '{brand_name}' no está registrada para este token ({brand_ids}). Usando '{first_brand}' dinámicamente.")
+                    brand_name = first_brand
+                else:
+                    logger.info(f"Brandlight: Usando marca '{brand_name}'")
+            except Exception as e:
+                logger.warning(f"Error al verificar marca de Brandlight: {e}")
+        else:
+            logger.info(f"Brandlight: Usando marca configurada explícitamente '{brand_name}'")
                 
         location = request.property_id.split("/")[-1] if request.property_id else "ES" # ej: ES, MX
         

@@ -17,6 +17,7 @@ Se auditó la conectividad de la API externa de Brandlight BI para soportar la c
   - Codifica en formato URL (`urllib.parse.quote`) los nombres de marcas con espacios para las llamadas a la API.
   - Captura y formatea las respuestas HTTP 500 / 503 del proveedor en mensajes claros y legibles para el usuario y logs.
   - Remueve los fallbacks locales ficticios ("Brand Demo España" / "LLYC Analytics") en `list_accounts()` para evitar enmascarar o sobreescribir las marcas reales guardadas cuando el servicio de Brandlight se encuentra indisponible (HTTP 503).
+  - Optimiza `run_report()` omitiendo la llamada redundante a `list_accounts()` cuando la marca ya está explícitamente configurada en el tenant, dirigiéndose directamente al endpoint de ranking.
 - **`etl_service.py`**:
   - Pasa `brandlight_brand_name` a `BrandlightService` durante la ejecución del proceso ETL.
   - Almacena el estado de error de forma aislada sin interrumpir la ingesta analítica de Google Analytics 4 (GA4).
