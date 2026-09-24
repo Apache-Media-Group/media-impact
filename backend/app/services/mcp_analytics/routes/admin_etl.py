@@ -548,7 +548,7 @@ async def delete_tenant_secret_admin(
     user_email: str = Depends(get_current_admin)
 ):
     """
-    Elimina por completo una llave secreta de un cliente.
+    Elimina por completo una llave secreta de un cliente y actualiza el estado en Firestore.
     """
     try:
         sms = SecretManagerService()
@@ -556,12 +556,22 @@ async def delete_tenant_secret_admin(
         secret_type_clean = secret_type.lower().strip()
 
         success = sms.delete_tenant_secret(tenant_id_clean, secret_type_clean)
-        if not success:
-            # Maybe it didn't exist, we just return ok
-            pass
-            
-        # We might also want to re-trigger ETL if a key is deleted? Usually not necessary
-        # unless to clear out existing data. We will leave it as just deleting the key.
+
+        # Actualizar documento del tenant en Firestore
+        try:
+            from app.services.mcp_analytics.firestore_service import FirestoreService
+            fs = FirestoreService()
+            tenant_doc = fs.get_tenant(tenant_id_clean)
+            if tenant_doc and "configured_secrets" in tenant_doc:
+                conf_secrets = tenant_doc.get("configured_secrets", {})
+                if secret_type_clean in conf_secrets:
+                    del conf_secrets[secret_type_clean]
+                    fs.db.collection("tenants").document(tenant_id_clean).update({
+                        "configured_secrets": conf_secrets,
+                        "updated_at": datetime.utcnow().isoformat()
+                    })
+        except Exception as e_fs:
+            logger.warning(f"No se pudo actualizar Firestore tras eliminar secreto: {e_fs}")
         
         return {
             "status": "success",
@@ -569,6 +579,46 @@ async def delete_tenant_secret_admin(
         }
     except Exception as e:
         logger.error(f"Error al eliminar secreto de tenant: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/admin/tenants/{tenant_id}")
+async def delete_tenant_admin(
+    tenant_id: str,
+    user_email: str = Depends(get_current_admin)
+):
+    """
+    Elimina por completo a un cliente (Tenant) de Firestore y borra todas sus credenciales en GCP Secret Manager.
+    """
+    try:
+        tenant_id_clean = tenant_id.lower().strip()
+        sms = SecretManagerService()
+        
+        from app.services.mcp_analytics.firestore_service import FirestoreService
+        fs = FirestoreService()
+
+        # 1. Eliminar todos los secretos asociados al tenant en GCP Secret Manager
+        secret_types = ["ga4-creds", "ga4-oauth", "adobe-creds", "peec-key", "brandlight-key"]
+        for st in secret_types:
+            try:
+                sms.delete_tenant_secret(tenant_id_clean, st)
+            except Exception as e_sec:
+                logger.warning(f"No se pudo eliminar secreto {st} para tenant {tenant_id_clean}: {e_sec}")
+
+        # 2. Eliminar el documento del tenant en Firestore
+        try:
+            fs.db.collection("tenants").document(tenant_id_clean).delete()
+        except Exception as e_fs:
+            logger.error(f"Error borrando documento tenant en Firestore: {e_fs}")
+            raise HTTPException(status_code=500, detail=f"Error borrando cliente en Firestore: {e_fs}")
+
+        logger.info(f"🗑️ Tenant '{tenant_id_clean}' eliminado exitosamente por {user_email}")
+        return {
+            "status": "success",
+            "message": f"Tenant '{tenant_id_clean}' y todas sus credenciales asociadas han sido eliminados."
+        }
+    except Exception as e:
+        logger.error(f"Error eliminando tenant {tenant_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -406,6 +406,10 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
     }
   };
 
+  const [deletingTenant, setDeletingTenant] = useState(false);
+  const [showDeleteTenantConfirm, setShowDeleteTenantConfirm] = useState(false);
+  const [deleteTenantInput, setDeleteTenantInput] = useState('');
+
   const handleDeleteSecret = async () => {
     if (!tenantId) return;
     if (
@@ -432,6 +436,34 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
       alert(err.message || 'Error al conectar con el backend para eliminar el secreto');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteTenant = async () => {
+    if (!tenantId) return;
+    if (deleteTenantInput.trim().toLowerCase() !== tenantId.trim().toLowerCase()) {
+      alert(`El ID ingresado ('${deleteTenantInput}') no coincide con el ID del cliente ('${tenantId}').`);
+      return;
+    }
+
+    try {
+      setDeletingTenant(true);
+      const res = await secureFetch(
+        `/api/v1/mcp-analytics/admin/tenants/${tenantId}`,
+        { method: 'DELETE' }
+      );
+      if (res.ok) {
+        onSaveSuccess(`Cliente '${tenantId}' y todas sus conexiones fueron eliminados definitivamente.`);
+        setShowDeleteTenantConfirm(false);
+        onClose();
+      } else {
+        const err = await res.json();
+        throw new Error(err.detail || 'Error al eliminar el cliente.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error al conectar con el servidor para eliminar el cliente.');
+    } finally {
+      setDeletingTenant(false);
     }
   };
 
@@ -574,13 +606,13 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
         <div className="p-6 border-b border-white/10 bg-white/[0.02] flex items-center gap-2">
           <Key className="w-5 h-5 text-amber-400" />
           <h3 className="font-black text-sm uppercase tracking-widest text-amber-400">
-            Administrar Credenciales de Ciberseguridad (GCP)
+            {forceEditMode ? "🔌 Gestionar Conexiones y Variables Operativas" : "Administrar Credenciales de Ciberseguridad (GCP)"}
           </h3>
         </div>
 
         <form onSubmit={handleSaveSecret} className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
           <div className="bg-amber-500/5 border border-amber-500/10 rounded-xl p-4 text-[11px] text-amber-300/80 leading-relaxed">
-            🛡️ **Seguridad Compliance**: Estas llaves serán guardadas y encriptadas de forma directa en **GCP Secret Manager**. Nunca se almacenarán en texto plano.
+            🛡️ **Seguridad Compliance**: Las conexiones se gestionan de forma segura en **GCP Secret Manager**. Puedes modificar marcas, propiedades y suites sin exponer o alterar tus llaves.
           </div>
 
           <div>
@@ -598,7 +630,7 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
           <div className="space-y-1.5 flex justify-between items-end">
             <div className="w-full">
               <label className="text-xs font-bold uppercase tracking-widest text-mid block mb-1">
-                ¿Qué llave quieres actualizar?
+                {forceEditMode ? "Conexión Activa a Gestionar" : "¿Qué llave quieres agregar / configurar?"}
               </label>
               <select
                 value={secretType}
@@ -749,6 +781,87 @@ export const CredentialModal: React.FC<CredentialModalProps> = ({
                   </>
                 )}
               </button>
+            </div>
+          )}
+
+          {/* DANGER ZONE / ZONA DE PELIGRO */}
+          {tenantId && (
+            <div className="mt-6 pt-4 border-t border-rose-500/20">
+              <div className="bg-rose-500/5 border border-rose-500/20 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-2 text-rose-400 font-bold text-xs uppercase tracking-wider">
+                  <span>⚠️ Danger Zone</span>
+                  <span className="text-[10px] text-rose-400/60 font-normal">Acciones Destructivas Irreversibles</span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+                  <div>
+                    <div className="text-xs font-bold text-white">Eliminar Conexión Activa</div>
+                    <div className="text-[10px] text-white/50">
+                      Elimina la credencial de {secretType} de GCP Secret Manager.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDeleteSecret}
+                    disabled={saving || redeploying || deletingTenant}
+                    className="px-3 py-1.5 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 font-bold text-[10px] uppercase tracking-wider rounded-lg transition-all whitespace-nowrap"
+                  >
+                    🗑️ Eliminar {secretType}
+                  </button>
+                </div>
+
+                <div className="pt-2 border-t border-rose-500/10 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-rose-300">Eliminar Cliente Completo</div>
+                    <div className="text-[10px] text-white/50">
+                      Elimina el perfil en Firestore y purga todas las llaves de {tenantId.toUpperCase()}.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteTenantConfirm(true)}
+                    disabled={saving || redeploying || deletingTenant}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-black text-[10px] uppercase tracking-wider rounded-lg transition-all shadow-lg flex items-center justify-center gap-1.5 whitespace-nowrap"
+                  >
+                    🔥 Eliminar Tenant
+                  </button>
+                </div>
+
+                {showDeleteTenantConfirm && (
+                  <div className="p-3 bg-rose-950/80 border border-rose-500/40 rounded-lg space-y-2 mt-2">
+                    <p className="text-[11px] text-rose-200 font-semibold">
+                      Para confirmar la destrucción total de <span className="font-bold underline">{tenantId.toUpperCase()}</span>, escribe exactamente su ID a continuación:
+                    </p>
+                    <input
+                      type="text"
+                      value={deleteTenantInput}
+                      onChange={(e) => setDeleteTenantInput(e.target.value)}
+                      placeholder={`Escribe ${tenantId.toLowerCase()} aquí...`}
+                      className="w-full bg-black/50 border border-rose-500/30 rounded px-3 py-1.5 text-xs text-rose-200 focus:outline-none focus:border-rose-400"
+                    />
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowDeleteTenantConfirm(false);
+                          setDeleteTenantInput('');
+                        }}
+                        className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white text-[10px] font-bold uppercase rounded"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleDeleteTenant}
+                        disabled={deletingTenant || deleteTenantInput.trim().toLowerCase() !== tenantId.trim().toLowerCase()}
+                        className="px-3 py-1 bg-rose-600 hover:bg-rose-500 disabled:opacity-40 text-white text-[10px] font-black uppercase rounded shadow transition-all"
+                      >
+                        {deletingTenant ? 'Destruyendo…' : 'Confirmar Borrado Definitivo'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </form>

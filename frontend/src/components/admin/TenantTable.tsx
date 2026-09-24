@@ -159,9 +159,9 @@ export const TenantTable: React.FC<TenantTableProps> = ({
                 </button>
                 <button
                   onClick={() => openSecretModal(t.tenant_id, true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/20 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-colors shadow-sm"
                 >
-                  <Key className="w-3.5 h-3.5" /> Editar Claves
+                  <Key className="w-3.5 h-3.5" /> 🔌 Gestionar Conexiones
                 </button>
                 <button
                   onClick={() => openEditModal(t)}

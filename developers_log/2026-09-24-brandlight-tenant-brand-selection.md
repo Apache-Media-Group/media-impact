@@ -23,13 +23,18 @@ Se auditó la conectividad de la API externa de Brandlight BI para soportar la c
   - Retorna `brandlight_brand_name` actual y lista de marcas asociadas en `/admin/tenants/{tenant_id}/secrets/brandlight-key/options`.
   - Habilita la actualización parcial vía `PATCH` para permitir editar el nombre de marca sin alterar el API Key almacenada en GCP Secret Manager.
   - Añade la ruta `/admin/tenants/validate-brandlight-brands` para consultar y validar marcas disponibles.
+  - Añade el endpoint `DELETE /admin/tenants/{tenant_id}` para purgar clientes y secretos en Firestore y GCP Secret Manager.
+  - Actualiza `DELETE /admin/tenants/{tenant_id}/secrets/{secret_type}` para sincronizar inmediatamente el estado en Firestore.
 
 ### 2. Frontend (`frontend/src/components/admin/`)
 - **`BrandlightCredentialForm.tsx`**:
   - Muestra un selector desplegable o campo de texto para especificar el `brandlight_brand_name` de la marca comercial.
   - Permite actualizar el nombre de marca en modo edición preservando la clave encriptada.
+- **`TenantTable.tsx`**:
+  - Incorpora el botón explícito `🔌 Gestionar Conexiones` en cada fila de cliente activo para acceder directamente a la gestión de variables operativas.
 - **`CredentialModal.tsx`**:
-  - Incorpora el flujo de validación, consulta de marcas y guardado/actualización parcial para secretos de tipo `brandlight-key`.
+  - Presenta el encabezado y textos orientados a la gestión de conexiones y actualización parcial de variables por conector.
+  - Incorpora la **Danger Zone** (Zona de Peligro) con eliminación de conexiones individuales y borrado definitivo de tenants con verificación de doble factor (typing tenant ID).
 
 ## ✅ Verificación de Calidad
 - **Frontend**: Compilado mediante `npm run build` con 0 errores.
