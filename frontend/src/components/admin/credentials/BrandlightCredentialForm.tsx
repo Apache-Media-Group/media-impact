@@ -22,6 +22,8 @@ export const BrandlightCredentialForm: React.FC<BrandlightCredentialFormProps> =
   onValidate,
   validating,
 }) => {
+  const [useManualInput, setUseManualInput] = React.useState(false);
+
   if (isEditMode) {
     return (
       <div className="space-y-4">
@@ -43,14 +45,26 @@ export const BrandlightCredentialForm: React.FC<BrandlightCredentialFormProps> =
         </div>
 
         <div>
-          <label className="block text-[11px] font-bold text-navy uppercase tracking-widest mb-1.5">
-            Marca Comercial Asociada en Brandlight BI
-          </label>
-          {brandlightBrandsList.length > 0 ? (
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="block text-[11px] font-bold text-navy uppercase tracking-widest">
+              Marca Comercial Asociada en Brandlight BI
+            </label>
+            {brandlightBrandsList.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setUseManualInput(!useManualInput)}
+                className="text-[10px] text-red font-bold hover:underline"
+              >
+                {useManualInput ? '📋 Seleccionar de la lista' : '✍️ Escribir manualmente'}
+              </button>
+            )}
+          </div>
+
+          {brandlightBrandsList.length > 0 && !useManualInput ? (
             <select
               value={brandlightBrandName}
               onChange={(e) => setBrandlightBrandName(e.target.value)}
-              className="w-full bg-dashboard-bg border border-dashboard-border rounded-xl px-4 py-2.5 text-xs text-navy focus:outline-none focus:border-red"
+              className="w-full bg-dashboard-bg border border-dashboard-border rounded-xl px-4 py-2.5 text-xs text-navy focus:outline-none focus:border-red font-semibold"
             >
               <option value="">-- Selecciona una marca autorizada --</option>
               {brandlightBrandsList.map((b) => (
@@ -66,11 +80,11 @@ export const BrandlightCredentialForm: React.FC<BrandlightCredentialFormProps> =
               value={brandlightBrandName}
               onChange={(e) => setBrandlightBrandName(e.target.value)}
               placeholder="ej: Nombre de Marca Registrada"
-              className="w-full bg-dashboard-bg border border-dashboard-border rounded-xl px-4 py-2.5 text-xs text-navy focus:outline-none focus:border-red"
+              className="w-full bg-dashboard-bg border border-dashboard-border rounded-xl px-4 py-2.5 text-xs text-navy focus:outline-none focus:border-red font-semibold"
             />
           )}
           <p className="text-[10px] text-mid mt-1">
-            Escribe o selecciona la marca registrada exactas en Brandlight para dirigir las consultas a sus endpoints.
+            Marca configurada actualmente: <strong className="text-navy">{brandlightBrandName || '(Ninguna)'}</strong>
           </p>
         </div>
       </div>

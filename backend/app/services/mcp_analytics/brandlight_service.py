@@ -155,20 +155,10 @@ class BrandlightService(AnalyticsService):
                             )
                         )
             
-            if not accounts:
-                # Fallback de marca en modo demostración si no hay marcas devueltas
-                return [
-                    GAAccount(account_id="brand-demo", name="accounts/brand-demo", display_name="Brand Demo"),
-                    GAAccount(account_id="llyc", name="accounts/llyc", display_name="LLYC Analytics")
-                ]
-                
             return accounts
         except Exception as e:
-            logger.warning(f"Error en list_accounts de Brandlight (usando fallbacks locales): {e}")
-            return [
-                GAAccount(account_id="brand-demo", name="accounts/brand-demo", display_name="Brand Demo España"),
-                GAAccount(account_id="llyc", name="accounts/llyc", display_name="LLYC Analytics")
-            ]
+            logger.warning(f"Error en list_accounts de Brandlight (retornando lista vacía): {e}")
+            return []
 
     async def list_properties(self, account_id: str) -> List[GAProperty]:
         """

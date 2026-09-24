@@ -473,6 +473,12 @@ async def get_tenant_secret_options_admin(
                 logger.warning(f"No se pudieron consultar marcas en vivo de Brandlight: {e}")
                 options["brands"] = []
 
+            # Si existe una marca actualmente guardada, aseguramos que esté presente en las opciones
+            if brand_name and options["brands"]:
+                existing_names = [b.get("name") for b in options["brands"]]
+                if brand_name not in existing_names:
+                    options["brands"].insert(0, {"id": brand_name, "name": brand_name})
+
             current_selection["brandlight_brand_name"] = brand_name
 
         else:
@@ -559,14 +565,15 @@ async def delete_tenant_secret_admin(
 
         # Actualizar documento del tenant en Firestore
         try:
-            from app.services.mcp_analytics.firestore_service import FirestoreService
-            fs = FirestoreService()
-            tenant_doc = fs.get_tenant(tenant_id_clean)
-            if tenant_doc and "configured_secrets" in tenant_doc:
+            from app.services.auth_utils import TokenManager
+            tm = TokenManager()
+            doc_snap = tm.db.collection("tenants").document(tenant_id_clean).get()
+            if doc_snap.exists:
+                tenant_doc = doc_snap.to_dict() or {}
                 conf_secrets = tenant_doc.get("configured_secrets", {})
                 if secret_type_clean in conf_secrets:
                     del conf_secrets[secret_type_clean]
-                    fs.db.collection("tenants").document(tenant_id_clean).update({
+                    tm.db.collection("tenants").document(tenant_id_clean).update({
                         "configured_secrets": conf_secrets,
                         "updated_at": datetime.utcnow().isoformat()
                     })
@@ -585,7 +592,8 @@ async def delete_tenant_secret_admin(
 @router.delete("/admin/tenants/{tenant_id}")
 async def delete_tenant_admin(
     tenant_id: str,
-    user_email: str = Depends(get_current_admin)
+    user_email: str = Depends(get_current_admin),
+    tm: TokenManager = Depends(get_token_manager)
 ):
     """
     Elimina por completo a un cliente (Tenant) de Firestore y borra todas sus credenciales en GCP Secret Manager.
@@ -593,9 +601,6 @@ async def delete_tenant_admin(
     try:
         tenant_id_clean = tenant_id.lower().strip()
         sms = SecretManagerService()
-        
-        from app.services.mcp_analytics.firestore_service import FirestoreService
-        fs = FirestoreService()
 
         # 1. Eliminar todos los secretos asociados al tenant en GCP Secret Manager
         secret_types = ["ga4-creds", "ga4-oauth", "adobe-creds", "peec-key", "brandlight-key"]
@@ -607,7 +612,7 @@ async def delete_tenant_admin(
 
         # 2. Eliminar el documento del tenant en Firestore
         try:
-            fs.db.collection("tenants").document(tenant_id_clean).delete()
+            tm.db.collection("tenants").document(tenant_id_clean).delete()
         except Exception as e_fs:
             logger.error(f"Error borrando documento tenant en Firestore: {e_fs}")
             raise HTTPException(status_code=500, detail=f"Error borrando cliente en Firestore: {e_fs}")
